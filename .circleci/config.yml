@@ -12,7 +12,7 @@ orbs:
 jobs:
   setup:
     executor: continuation/default
-    resource_class: small
+    resource_class: large
     steps:
       - droidian-buildd/checkout
       - droidian-buildd/generate
