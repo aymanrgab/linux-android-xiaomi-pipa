@@ -22,8 +22,11 @@ KERNEL_BUILD_HEADER = 1
 
 # Cross-compilation
 BUILD_CROSS = 1
-BUILD_TRIPLET = aarch64-linux-gnu-
-DEB_TOOLCHAIN = gcc-aarch64-linux-gnu
+BUILD_TRIPLET = aarch64-linux-android-
+BUILD_CC = clang
+BUILD_PATH = /usr/lib/llvm-android-6.0-4691093/bin
+BUILD_CLANG_TRIPLET = aarch64-linux-gnu-
+DEB_TOOLCHAIN = linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, clang-android-6.0-4691093, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross
 DEB_BUILD_ON = amd64
 DEB_BUILD_FOR = arm64
 
@@ -45,11 +48,9 @@ FLASH_VBMETA_REQUIRED = 0
 # Build target (no appended DTB, device uses boot image header)
 KERNEL_BUILD_TARGET = Image.gz
 
-# Droidian-specific config fragments
-KERNEL_CONFIG_FRAGMENTS = vendor/kona-perf_defconfig \
-                          vendor/xiaomi/sm8250-common.config \
-                          vendor/xiaomi/pipa.config \
-                          droidian.config
+# Config fragment system
+KERNEL_CONFIG_USE_FRAGMENTS = 1
 
-# Kernel variant
-KERNEL_VARIANT = droidian
+# Additional device-specific config fragments (placed in droidian/)
+KERNEL_CONFIG_EXTRA_FRAGMENTS = sm8250-common.config \
+                                pipa-xiaomi.config
