@@ -4,14 +4,32 @@ Priority: optional
 Maintainer: Droidian Port Maintainer <maintainer@example.com>
 XS-Droidian-Host-Arch: arm64
 XS-Droidian-Build-On: amd64
-Build-Depends: build-essential, dpkg-dev, findutils,
-               debhelper (>= 13), bc, rsync, kmod, cpio, bison, flex,
-               libssl-dev, linux-initramfs-halium-generic,
-               linux-packaging-snippets, mkbootimg (>= 10.0.0),
-               mkdtboimg, avbtool,
+Build-Depends: build-essential,
+               dpkg-dev,
+               findutils,
+               android-platform-prebuilts-python-linux-x86-2.7.5 [amd64],
+               debhelper (>= 13),
+               debhelper-compat (= 13),
+               bc,
+               rsync,
+               kmod,
+               cpio,
+               bison,
+               flex,
+               libssl-dev,
+               linux-initramfs-halium-generic,
+               linux-packaging-snippets,
+               android-sdk-ufdt-tests,
+               mkbootimg (>= 10.0.0),
+               mkdtboimg,
+               avbtool,
+               lz4,
                linux-initramfs-halium-generic:arm64,
-               binutils-aarch64-linux-gnu, gcc-aarch64-linux-gnu,
-               device-tree-compiler, lz4
+               binutils-aarch64-linux-gnu,
+               clang-android-6.0-4691093,
+               gcc-4.9-aarch64-linux-android,
+               g++-4.9-aarch64-linux-android,
+               libgcc-4.9-dev-aarch64-linux-android-cross
 Standards-Version: 4.5.0.3
 
 Package: linux-image-xiaomi-pipa
