@@ -1,0 +1,5 @@
+linux-android-xiaomi-pipa (0.0.1) unstable; urgency=medium
+
+  * Initial Droidian kernel for Xiaomi Pad 6 (pipa).
+
+ -- Droidian Port Maintainer <maintainer@example.com>  Sat, 13 Jun 2026 00:00:00 +0000

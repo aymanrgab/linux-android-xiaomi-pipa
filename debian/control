@@ -1,0 +1,31 @@
+Source: linux-android-xiaomi-pipa
+Section: kernel
+Priority: optional
+Maintainer: Droidian Port Maintainer <maintainer@example.com>
+XS-Droidian-Host-Arch: arm64
+XS-Droidian-Build-On: amd64
+Build-Depends: build-essential, dpkg-dev, findutils,
+               debhelper (>= 13), bc, rsync, kmod, cpio, bison, flex,
+               libssl-dev, linux-initramfs-halium-generic,
+               linux-packaging-snippets, mkbootimg (>= 10.0.0),
+               mkdtboimg, avbtool,
+               linux-initramfs-halium-generic:arm64,
+               binutils-aarch64-linux-gnu, gcc-aarch64-linux-gnu,
+               device-tree-compiler, lz4
+Standards-Version: 4.5.0.3
+
+Package: linux-image-xiaomi-pipa
+Architecture: arm64
+Depends: ${misc:Depends}
+Description: Linux kernel for Xiaomi Pad 6 (pipa)
+
+Package: linux-bootimage-xiaomi-pipa
+Architecture: arm64
+Pre-Depends: flash-bootimage (>= 4)
+Depends: ${misc:Depends}, linux-image-xiaomi-pipa (= ${binary:Version})
+Description: Linux kernel for Xiaomi Pad 6 (pipa) - Android Boot Image
+
+Package: linux-headers-xiaomi-pipa
+Architecture: arm64
+Depends: ${misc:Depends}, linux-image-xiaomi-pipa (= ${binary:Version})
+Description: Linux kernel for Xiaomi Pad 6 (pipa) - headers
