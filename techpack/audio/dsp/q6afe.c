@@ -9509,7 +9509,7 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 		return -EINVAL;
 	}
 
-	if (clk_src_name[0] != '\0') {
+	if (clk_src_name[0][0] != '\0') {
 		if (cfg->clk_freq_in_hz % AFE_SAMPLING_RATE_8KHZ) {
 			if (clk_src_name[CLK_SRC_FRACT][0] != '\0')
 				ret = afe_set_source_clk(port_id,
