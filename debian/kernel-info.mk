@@ -63,6 +63,9 @@ KERNEL_BOOTIMAGE_DTB_OFFSET =
 # Kernel bootimage version.
 KERNEL_BOOTIMAGE_VERSION = 2
 
+# Kernel initramfs compression.
+KERNEL_INITRAMFS_COMPRESSION = gzip
+
 ########################################################################
 # Android verified boot
 ########################################################################
@@ -93,13 +96,13 @@ FLASH_INFO_DEVICE_IDS = pipa
 BUILD_CROSS = 1
 
 # (Cross-build only) The build triplet to use.
-BUILD_TRIPLET = aarch64-linux-android-
+BUILD_TRIPLET = aarch64-linux-gnu-
 
 # (Cross-build only) The build triplet to use with clang.
 BUILD_CLANG_TRIPLET = aarch64-linux-gnu-
 
 # The compiler to use.
-BUILD_CC = clang
+BUILD_CC = aarch64-linux-gnu-gcc
 
 # Set to 1 to skip modules packaging if CONFIG_MODULES is disabled in defconfig
 BUILD_SKIP_MODULES = 1
@@ -111,10 +114,10 @@ CLANG_VERSION = 14.0-r450784d
 CLANG_CUSTOM = 0
 
 # Extra paths to prepend to the PATH variable.
-BUILD_PATH = /usr/lib/llvm-android-14.0-r450784d/bin
+BUILD_PATH = /usr/bin/
 
 # Extra packages to add to the Build-Depends section.
-DEB_TOOLCHAIN = linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, crossbuild-essential-arm64, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross, clang-android-14.0-r450784d, lz4
+DEB_TOOLCHAIN = linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, crossbuild-essential-arm64, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross, lz4
 
 # Where we're building on
 DEB_BUILD_ON = amd64
