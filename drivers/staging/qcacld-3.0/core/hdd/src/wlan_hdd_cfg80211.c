@@ -1170,7 +1170,7 @@ hdd_convert_hang_reason(enum qdf_hang_reason reason)
  * Return: 0 on success or failure reason
  */
 int wlan_hdd_send_hang_reason_event(struct hdd_context *hdd_ctx,
-				    enum qdf_hang_reason reason, uint8_t *data,
+				    uint32_t reason, uint8_t *data,
 				    size_t data_len)
 {
 	struct sk_buff *vendor_event;
@@ -1200,7 +1200,7 @@ int wlan_hdd_send_hang_reason_event(struct hdd_context *hdd_ctx,
 		return -ENOMEM;
 	}
 
-	hang_reason = hdd_convert_hang_reason(reason);
+	hang_reason = hdd_convert_hang_reason((enum qdf_hang_reason)reason);
 
 	if (nla_put_u32(vendor_event, QCA_WLAN_VENDOR_ATTR_HANG_REASON,
 			(uint32_t)hang_reason) ||
