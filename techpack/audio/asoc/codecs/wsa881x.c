@@ -485,7 +485,7 @@ static ssize_t codec_debug_read(struct file *file, char __user *ubuf,
 static ssize_t codec_debug_peek_write(struct file *file,
 		const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
-	char lbuf[SWR_SLV_WR_BUF_LEN];
+	char lbuf[SWR_SLV_WR_BUF_LEN] = {0};
 	int rc = 0;
 	u32 param[5];
 	struct swr_device *pdev = NULL;

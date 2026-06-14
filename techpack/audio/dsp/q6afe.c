@@ -8062,7 +8062,7 @@ static ssize_t afe_debug_write(struct file *filp,
 	const char __user *ubuf, size_t cnt, loff_t *ppos)
 {
 	char *lb_str = filp->private_data;
-	char lbuf[32];
+	char lbuf[32] = {0};
 	int rc;
 	unsigned long param[5];
 
@@ -9188,7 +9188,7 @@ static int afe_get_clk_src(u16 port_id, char *clk_src)
 		return -EINVAL;
 	}
 
-	if (clkinfo_per_port[idx].clk_src_name == NULL)
+	if (clkinfo_per_port[idx].clk_src_name[0] == '\0')
 		return -EINVAL;
 	strlcpy(clk_src, clkinfo_per_port[idx].clk_src_name,
 				CLK_SRC_NAME_MAX);
@@ -9509,12 +9509,12 @@ int afe_set_lpass_clock_v2(u16 port_id, struct afe_clk_set *cfg)
 		return -EINVAL;
 	}
 
-	if (clk_src_name != NULL) {
+	if (clk_src_name[0] != '\0') {
 		if (cfg->clk_freq_in_hz % AFE_SAMPLING_RATE_8KHZ) {
-			if (clk_src_name[CLK_SRC_FRACT] != NULL)
+			if (clk_src_name[CLK_SRC_FRACT][0] != '\0')
 				ret = afe_set_source_clk(port_id,
 						clk_src_name[CLK_SRC_FRACT]);
-		} else if (clk_src_name[CLK_SRC_INTEGRAL] != NULL) {
+		} else if (clk_src_name[CLK_SRC_INTEGRAL][0] != '\0') {
 			ret = afe_set_source_clk(port_id,
 					clk_src_name[CLK_SRC_INTEGRAL]);
 		}
