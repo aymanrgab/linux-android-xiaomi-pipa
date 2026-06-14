@@ -21,7 +21,7 @@ static ssize_t speakup_file_write(struct file *fp, const char __user *buffer,
 	const char __user *ptr = buffer;
 	size_t bytes;
 	unsigned long flags;
-	u_char buf[256];
+	u_char buf[256] = {0};
 
 	if (!synth)
 		return -ENODEV;
