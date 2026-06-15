@@ -5,6 +5,7 @@ config SECURITY_APPARMOR
 	select SECURITY_PATH
 	select SECURITYFS
 	select SECURITY_NETWORK
+	select NETWORK_SECMARK
 	default n
 	help
 	  This enables the AppArmor security module.
