@@ -26,13 +26,13 @@ DEVICE_MODEL = pipa
 DEVICE_FULL_NAME = Xiaomi Pad 6
 
 # Whether to use configuration fragments to augment the kernel configuration.
-KERNEL_CONFIG_USE_FRAGMENTS = 1
+KERNEL_CONFIG_USE_FRAGMENTS = 0
 
 # Whether to use diffconfig to generate the device-specific configuration.
 KERNEL_CONFIG_USE_DIFFCONFIG = 0
 
 # Defconfig to use
-KERNEL_DEFCONFIG = vendor/kona_defconfig
+KERNEL_DEFCONFIG = vendor/pipa_defconfig
 
 # Whether to include DTBs with the image. Use 0 (no) or 1.
 KERNEL_IMAGE_WITH_DTB = 0
@@ -130,8 +130,3 @@ KERNEL_ARCH = arm64
 
 # Kernel target to build
 KERNEL_BUILD_TARGET = Image.gz
-
-# Additional device-specific config fragments (placed in droidian/)
-KERNEL_CONFIG_EXTRA_FRAGMENTS = sm8250-common.config \
-                                pipa-xiaomi.config \
-                                pipa.config
