@@ -64,7 +64,7 @@ KERNEL_BOOTIMAGE_DTB_OFFSET =
 KERNEL_BOOTIMAGE_VERSION = 2
 
 # Kernel initramfs compression.
-KERNEL_INITRAMFS_COMPRESSION = gzip
+KERNEL_INITRAMFS_COMPRESSION = gz
 
 ########################################################################
 # Android verified boot
