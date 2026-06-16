@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
+# Upstream MSM DRM is disabled when the techpack display variant exists.
+ifneq ($(wildcard $(srctree)/techpack/display/msm/Makefile),)
+# techpack/display/msm handles the display driver — nothing to build here
+else
 ccflags-y := -I $(srctree)/drivers/gpu/drm/msm
 ccflags-y += -I $(srctree)/drivers/gpu/drm/msm/disp/dpu1
 ccflags-$(CONFIG_DRM_MSM_DSI) += -I $(srctree)/drivers/gpu/drm/msm/dsi
@@ -83,10 +87,8 @@ msm-y := \
 	msm_ringbuffer.o \
 	msm_submitqueue.o
 
-# use drm gpu driver only if qcom_kgsl driver not available
-#ifneq ($(CONFIG_QCOM_KGSL),y)
 msm_drm-y += adreno/adreno_device.o \
-     	adreno/adreno_gpu.o \
+      	adreno/adreno_gpu.o \
 	adreno/a3xx_gpu.o \
 	adreno/a4xx_gpu.o \
 	adreno/a5xx_gpu.o \
@@ -95,7 +97,6 @@ msm_drm-y += adreno/adreno_device.o \
 	adreno/a6xx_gpu.o\
 	adreno/a6xx_gmu.o\
  	adreno/a6xx_hfi.o
-#endif
 
 msm-$(CONFIG_DEBUG_FS) += adreno/a5xx_debugfs.o \
 			  disp/dpu1/dpu_dbg.o
@@ -130,3 +131,4 @@ msm-$(CONFIG_DRM_MSM_DSI_10NM_PHY) += dsi/pll/dsi_pll_10nm.o
 endif
 
 obj-$(CONFIG_DRM_MSM)	+= msm.o
+endif
