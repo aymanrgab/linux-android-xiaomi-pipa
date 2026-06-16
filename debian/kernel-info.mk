@@ -41,7 +41,7 @@ KERNEL_IMAGE_WITH_DTB = 1
 KERNEL_IMAGE_WITH_DTB_OVERLAY = 1
 
 # Whether to merge DTB + Overlay into the kernel image at build time.
-KERNEL_IMAGE_WITH_DTB_OVERLAY_IN_KERNEL = 1
+KERNEL_IMAGE_WITH_DTB_OVERLAY_IN_KERNEL = 0
 
 # Specify DTB file to include (relative to KERNEL_OUT).
 # Base SoC DTB for SM8250 v2.1 (which pipa uses per qcom,msm-id).
