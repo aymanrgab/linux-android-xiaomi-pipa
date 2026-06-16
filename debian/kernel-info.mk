@@ -35,21 +35,28 @@ KERNEL_CONFIG_USE_DIFFCONFIG = 0
 KERNEL_DEFCONFIG = vendor/pipa_defconfig
 
 # Whether to include DTBs with the image. Use 0 (no) or 1.
-KERNEL_IMAGE_WITH_DTB = 0
+KERNEL_IMAGE_WITH_DTB = 1
 
 # Whether to include a DTB Overlay. Use 0 (no) or 1.
 KERNEL_IMAGE_WITH_DTB_OVERLAY = 0
+
+# Specify DTB file to include (relative to KERNEL_OUT).
+# Pipa uses SM8250 v2.1, the DTB is kona-v2.1.dtb.
+KERNEL_IMAGE_DTB = arch/arm64/boot/dts/vendor/qcom/kona-v2.1.dtb
+
+# Specify DTB Overlay file to include (relative to KERNEL_OUT).
+# KERNEL_IMAGE_DTB_OVERLAY = arch/arm64/boot/dts/vendor/qcom/pipa-sm8250-overlay.dtbo
 
 # Whether to build a boot image header from scratch.
 KERNEL_BUILD_HEADER = 1
 
 # Various other settings that will be passed straight to mkbootimg
 KERNEL_BOOTIMAGE_PAGE_SIZE = 4096
-KERNEL_BOOTIMAGE_BASE_OFFSET =
-KERNEL_BOOTIMAGE_KERNEL_OFFSET =
-KERNEL_BOOTIMAGE_INITRAMFS_OFFSET =
-KERNEL_BOOTIMAGE_SECONDIMAGE_OFFSET =
-KERNEL_BOOTIMAGE_TAGS_OFFSET =
+KERNEL_BOOTIMAGE_BASE_OFFSET = 0x00000000
+KERNEL_BOOTIMAGE_KERNEL_OFFSET = 0x00008000
+KERNEL_BOOTIMAGE_INITRAMFS_OFFSET = 0x01000000
+KERNEL_BOOTIMAGE_SECONDIMAGE_OFFSET = 0x00f00000
+KERNEL_BOOTIMAGE_TAGS_OFFSET = 0x00000100
 
 # Specify boot image security patch level if needed
 # KERNEL_BOOTIMAGE_PATCH_LEVEL = 2023-08
@@ -58,7 +65,7 @@ KERNEL_BOOTIMAGE_TAGS_OFFSET =
 # KERNEL_BOOTIMAGE_OS_VERSION = 12.0.0
 
 # Required for header version 2, ignore otherwise
-KERNEL_BOOTIMAGE_DTB_OFFSET =
+KERNEL_BOOTIMAGE_DTB_OFFSET = 0x01f00000
 
 # Kernel bootimage version.
 KERNEL_BOOTIMAGE_VERSION = 2
