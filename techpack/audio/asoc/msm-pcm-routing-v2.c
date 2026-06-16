@@ -1295,9 +1295,6 @@ static int msm_routing_get_adm_topology(int fedai_id, int session_type,
 	pr_debug("%s: fedai_id %d, session_type %d, be_id %d\n",
 	       __func__, fedai_id, session_type, be_id);
 
-	if (cal_data == NULL)
-		goto done;
-
 	app_type = fe_dai_app_type_cfg[fedai_id][session_type][be_id].app_type;
 	acdb_dev_id =
 		fe_dai_app_type_cfg[fedai_id][session_type][be_id].acdb_dev_id;
@@ -1318,7 +1315,6 @@ static int msm_routing_get_adm_topology(int fedai_id, int session_type,
 		if (topology < 0)
 			topology = NULL_COPP_TOPOLOGY;
 	}
-done:
 	pr_debug("%s: Using topology %d\n", __func__, topology);
 	return topology;
 }
@@ -24307,7 +24303,7 @@ static const int mi2s_rx_vi_fb_tx_value[] = {
 };
 
 #if defined(CONFIG_SND_SOC_AW882XX_TDM)
-static const int const tert_tdm_rx_vi_fb_tx_value[] = {
+static const int tert_tdm_rx_vi_fb_tx_value[] = {
 	MSM_BACKEND_DAI_MAX, PLATFORM_TDM_RX_VI_FB_TX_VALUE
 };
 #endif
