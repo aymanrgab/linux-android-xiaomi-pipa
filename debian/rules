@@ -2,5 +2,9 @@
 
 include /usr/share/linux-packaging-snippets/kernel-snippet.mk
 
+out/KERNEL_OBJ/initramfs.gzip:
+	mkdir -p $(@D)
+	mkinitramfs -o $@ $(KERNEL_BASE_VERSION)-$(DEVICE_VENDOR)-$(DEVICE_MODEL)
+
 %:
 	dh $@
