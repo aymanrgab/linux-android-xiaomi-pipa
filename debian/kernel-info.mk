@@ -38,14 +38,18 @@ KERNEL_DEFCONFIG = vendor/pipa_defconfig
 KERNEL_IMAGE_WITH_DTB = 1
 
 # Whether to include a DTB Overlay. Use 0 (no) or 1.
-KERNEL_IMAGE_WITH_DTB_OVERLAY = 0
+KERNEL_IMAGE_WITH_DTB_OVERLAY = 1
+
+# Whether to merge DTB + Overlay into the kernel image at build time.
+KERNEL_IMAGE_WITH_DTB_OVERLAY_IN_KERNEL = 1
 
 # Specify DTB file to include (relative to KERNEL_OUT).
-# Pipa uses SM8250 v2.1, the DTB is kona-v2.1.dtb.
+# Base SoC DTB for SM8250 v2.1 (which pipa uses per qcom,msm-id).
 KERNEL_IMAGE_DTB = arch/arm64/boot/dts/vendor/qcom/kona-v2.1.dtb
 
 # Specify DTB Overlay file to include (relative to KERNEL_OUT).
-# KERNEL_IMAGE_DTB_OVERLAY = arch/arm64/boot/dts/vendor/qcom/pipa-sm8250-overlay.dtbo
+# Merged with the base DTB via ufdt_apply_overlay to produce the pipa device tree.
+KERNEL_IMAGE_DTB_OVERLAY = arch/arm64/boot/dts/vendor/qcom/pipa-sm8250-overlay.dtbo
 
 # Whether to build a boot image header from scratch.
 KERNEL_BUILD_HEADER = 1
