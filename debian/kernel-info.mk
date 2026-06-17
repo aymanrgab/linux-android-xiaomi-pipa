@@ -12,8 +12,14 @@ KERNEL_BASE_VERSION = 4.19-325
 KERNEL_BOOTIMAGE_CMDLINE = console=ttyMSM0,115200n8 androidboot.hardware=qcom \
                             androidboot.console=ttyMSM0 androidboot.memcg=1 \
                             lpm_levels.sleep_disabled=1 msm_rtb.filter=0x237 \
-                            service_locator.enable=1 swiotlb=2048 \
-                            loop.max_part=7 androidboot.selinux=permissive \
+                            service_locator.enable=1 \
+                            androidboot.usbcontroller=a600000.dwc3 \
+                            swiotlb=2048 loop.max_part=7 \
+                            cgroup.memory=nokmem,nosocket reboot=panic_warm \
+                            androidboot.fstab_suffix=qcom \
+                            androidboot.init_fatal_reboot_target=recovery \
+                            androidboot.selinux=permissive \
+                            console=tty0 \
                             droidian.lvm.prefer
 
 # Slug for the device vendor.
@@ -116,7 +122,7 @@ BUILD_CLANG_TRIPLET = aarch64-linux-gnu-
 BUILD_CC = aarch64-linux-gnu-gcc
 
 # Set to 1 to skip modules packaging if CONFIG_MODULES is disabled in defconfig
-BUILD_SKIP_MODULES = 1
+BUILD_SKIP_MODULES = 0
 
 # Set clang version
 CLANG_VERSION = 14.0-r450784d
