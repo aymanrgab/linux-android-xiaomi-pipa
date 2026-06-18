@@ -57,7 +57,16 @@ KERNEL_IMAGE_DTB = arch/arm64/boot/dts/vendor/qcom/kona-v2.1.dtb
 
 # Specify DTB Overlay file to include (relative to KERNEL_OUT).
 # Merged with the base DTB via ufdt_apply_overlay to produce the pipa device tree.
-KERNEL_IMAGE_DTB_OVERLAY = arch/arm64/boot/dts/vendor/qcom/pipa-sm8250-overlay.dtbo
+# Unused when KERNEL_IMAGE_DTB_OVERLAY_CONFIGURATION is set (which uses cfg_create instead).
+# KERNEL_IMAGE_DTB_OVERLAY = arch/arm64/boot/dts/vendor/qcom/pipa-sm8250-overlay.dtbo
+
+# DTBO configuration file for mkdtboimg cfg_create.
+# Packs all 13 Xiaomi SM8250 device overlays into a single dtbo.img,
+# matching the stock dtbo partition format.
+KERNEL_IMAGE_DTB_OVERLAY_CONFIGURATION = arch/arm64/boot/dts/vendor/qcom/sm8250-xiaomi-dtbo.cfg
+
+# Directory containing the compiled .dtbo files (relative to KERNEL_OUT).
+KERNEL_IMAGE_DTB_OVERLAY_DTB_DIRECTORY = arch/arm64/boot/dts/vendor/qcom
 
 # Whether to build a boot image header from scratch.
 KERNEL_BUILD_HEADER = 1
@@ -65,6 +74,9 @@ KERNEL_BUILD_HEADER = 1
 # Various other settings that will be passed straight to mkbootimg
 KERNEL_BOOTIMAGE_PAGE_SIZE = 4096
 KERNEL_BOOTIMAGE_BASE_OFFSET = 0x00000000
+
+# Boot partition size for AVB footer (192 MB for Xiaomi Pad 6 pipa)
+KERNEL_BOOTIMAGE_PARTITION_SIZE = 201326592
 
 # Specify boot image security patch level if needed
 # KERNEL_BOOTIMAGE_PATCH_LEVEL = 2023-08
