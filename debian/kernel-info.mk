@@ -112,7 +112,7 @@ BUILD_CROSS = 1
 BUILD_TRIPLET = aarch64-linux-android-
 
 # (Cross-build only) The build triplet to use with clang.
-BUILD_CLANG_TRIPLET = aarch64-linux-android-
+BUILD_CLANG_TRIPLET = aarch64-linux-gnu-
 
 # The compiler to use.
 BUILD_CC = clang
@@ -127,7 +127,7 @@ CLANG_VERSION = 14.0-r450784d
 CLANG_CUSTOM = 0
 
 # Extra paths to prepend to the PATH variable.
-BUILD_PATH = /usr/bin/
+BUILD_PATH = /usr/lib/llvm-android-$(CLANG_VERSION)/bin
 
 # Extra packages to add to the Build-Depends section.
 DEB_TOOLCHAIN = linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, crossbuild-essential-arm64, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross, lz4
