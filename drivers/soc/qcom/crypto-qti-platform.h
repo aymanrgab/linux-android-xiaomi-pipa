@@ -34,7 +34,7 @@ static inline int crypto_qti_invalidate_key(
 {
 	return 0;
 }
-static int crypto_qti_tz_raw_secret(u8 *wrapped_key,
+static int crypto_qti_tz_raw_secret(const u8 *wrapped_key,
 					unsigned int wrapped_key_size,
 					u8 *secret, unsigned int secret_size)
 {
