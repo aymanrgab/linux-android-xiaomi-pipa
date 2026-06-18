@@ -6,12 +6,15 @@
 VARIANT = android
 
 # Kernel base version
-KERNEL_BASE_VERSION = 4.19-325
+KERNEL_BASE_VERSION = 4.19.325
 
 # The kernel cmdline to use
-KERNEL_BOOTIMAGE_CMDLINE = console=ttyMSM0,115200n8 androidboot.hardware=qcom \
-                            androidboot.console=ttyMSM0 androidboot.memcg=1 \
-                            lpm_levels.sleep_disabled=1 msm_rtb.filter=0x237 \
+# Match the Android device tree for pipa, then append Droidian-specific bits.
+KERNEL_BOOTIMAGE_CMDLINE = androidboot.hardware=qcom \
+                            androidboot.console=ttyMSM0 \
+                            androidboot.memcg=1 \
+                            lpm_levels.sleep_disabled=1 \
+                            msm_rtb.filter=0x237 \
                             service_locator.enable=1 \
                             androidboot.usbcontroller=a600000.dwc3 \
                             swiotlb=2048 loop.max_part=7 \
@@ -19,7 +22,6 @@ KERNEL_BOOTIMAGE_CMDLINE = console=ttyMSM0,115200n8 androidboot.hardware=qcom \
                             androidboot.fstab_suffix=qcom \
                             androidboot.init_fatal_reboot_target=recovery \
                             androidboot.selinux=permissive \
-                            console=tty0 \
                             droidian.lvm.prefer
 
 # Slug for the device vendor.
@@ -63,10 +65,6 @@ KERNEL_BUILD_HEADER = 1
 # Various other settings that will be passed straight to mkbootimg
 KERNEL_BOOTIMAGE_PAGE_SIZE = 4096
 KERNEL_BOOTIMAGE_BASE_OFFSET = 0x00000000
-KERNEL_BOOTIMAGE_KERNEL_OFFSET = 0x00008000
-KERNEL_BOOTIMAGE_INITRAMFS_OFFSET = 0x01000000
-KERNEL_BOOTIMAGE_SECONDIMAGE_OFFSET = 0x00f00000
-KERNEL_BOOTIMAGE_TAGS_OFFSET = 0x00000100
 
 # Specify boot image security patch level if needed
 # KERNEL_BOOTIMAGE_PATCH_LEVEL = 2023-08
@@ -74,11 +72,9 @@ KERNEL_BOOTIMAGE_TAGS_OFFSET = 0x00000100
 # Specify boot image OS version if needed
 # KERNEL_BOOTIMAGE_OS_VERSION = 12.0.0
 
-# Required for header version 2, ignore otherwise
-KERNEL_BOOTIMAGE_DTB_OFFSET = 0x01f00000
-
 # Kernel bootimage version.
-KERNEL_BOOTIMAGE_VERSION = 2
+# Upstream Android device trees mark pipa as VAB, which uses header v3.
+KERNEL_BOOTIMAGE_VERSION = 3
 
 # Kernel initramfs compression.
 KERNEL_INITRAMFS_COMPRESSION = gz
@@ -88,7 +84,7 @@ KERNEL_INITRAMFS_COMPRESSION = gz
 ########################################################################
 
 # Whether to build a flashable vbmeta.img.
-DEVICE_VBMETA_REQUIRED = 0
+DEVICE_VBMETA_REQUIRED = 1
 
 ########################################################################
 # Automatic flashing on package upgrades
@@ -113,13 +109,13 @@ FLASH_INFO_DEVICE_IDS = pipa
 BUILD_CROSS = 1
 
 # (Cross-build only) The build triplet to use.
-BUILD_TRIPLET = aarch64-linux-gnu-
+BUILD_TRIPLET = aarch64-linux-android-
 
 # (Cross-build only) The build triplet to use with clang.
-BUILD_CLANG_TRIPLET = aarch64-linux-gnu-
+BUILD_CLANG_TRIPLET = aarch64-linux-android-
 
 # The compiler to use.
-BUILD_CC = aarch64-linux-gnu-gcc
+BUILD_CC = clang
 
 # Set to 1 to skip modules packaging if CONFIG_MODULES is disabled in defconfig
 BUILD_SKIP_MODULES = 0
@@ -146,4 +142,4 @@ DEB_BUILD_FOR = arm64
 KERNEL_ARCH = arm64
 
 # Kernel target to build
-KERNEL_BUILD_TARGET = Image.gz
+KERNEL_BUILD_TARGET = Image
