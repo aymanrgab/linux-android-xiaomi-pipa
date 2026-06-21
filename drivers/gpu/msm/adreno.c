@@ -1437,6 +1437,20 @@ static int adreno_read_speed_bin(struct platform_device *pdev,
 	return PTR_ERR_OR_ZERO(buf);
 }
 
+static u32 adreno_get_vk_device_id(struct kgsl_device *device)
+{
+	static u32 device_id;
+
+	if (device_id)
+		return device_id;
+
+	if (of_property_read_u32(device->pdev->dev.of_node,
+			"qcom,vk-device-id", &device_id))
+		device_id = ADRENO_DEVICE(device)->chipid;
+
+	return device_id;
+}
+
 static int adreno_probe_efuse(struct platform_device *pdev,
 					struct adreno_device *adreno_dev)
 {
@@ -2730,6 +2744,8 @@ static int adreno_prop_u32(struct kgsl_device *device,
 		val = adreno_support_64bit(adreno_dev) ? 48 : 32;
 	else if (param->type == KGSL_PROP_SPEED_BIN)
 		val = adreno_dev->speed_bin;
+	else if (param->type == KGSL_PROP_VK_DEVICE_ID)
+		val = adreno_get_vk_device_id(device);
 
 	return copy_prop(param, &val, sizeof(val));
 }
@@ -2753,6 +2769,7 @@ static const struct {
 	{ KGSL_PROP_DEVICE_BITNESS, adreno_prop_u32 },
 	{ KGSL_PROP_SPEED_BIN, adreno_prop_u32 },
 	{ KGSL_PROP_GAMING_BIN, adreno_prop_gaming_bin },
+	{ KGSL_PROP_VK_DEVICE_ID, adreno_prop_u32 },
 };
 
 static int adreno_getproperty(struct kgsl_device *device,
