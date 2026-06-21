@@ -2726,6 +2726,21 @@ static int adreno_prop_gaming_bin(struct kgsl_device *device,
 	return -EINVAL;
 }
 
+static int adreno_prop_gpu_model(struct kgsl_device *device,
+		struct kgsl_device_getproperty *param)
+{
+	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
+	char model[32];
+
+	snprintf(model, sizeof(model), "Adreno%d%d%dv%d",
+			ADRENO_CHIPID_CORE(adreno_dev->chipid),
+			 ADRENO_CHIPID_MAJOR(adreno_dev->chipid),
+			 ADRENO_CHIPID_MINOR(adreno_dev->chipid),
+			 ADRENO_CHIPID_PATCH(adreno_dev->chipid) + 1);
+
+	return copy_prop(param, model, strlen(model) + 1);
+}
+
 static int adreno_prop_u32(struct kgsl_device *device,
 		struct kgsl_device_getproperty *param)
 {
@@ -2769,6 +2784,7 @@ static const struct {
 	{ KGSL_PROP_DEVICE_BITNESS, adreno_prop_u32 },
 	{ KGSL_PROP_SPEED_BIN, adreno_prop_u32 },
 	{ KGSL_PROP_GAMING_BIN, adreno_prop_gaming_bin },
+	{ KGSL_PROP_GPU_MODEL, adreno_prop_gpu_model },
 	{ KGSL_PROP_VK_DEVICE_ID, adreno_prop_u32 },
 };
 
