@@ -34,7 +34,7 @@ DEVICE_MODEL = pipa
 DEVICE_FULL_NAME = Xiaomi Pad 6
 
 # Whether to use configuration fragments to augment the kernel configuration.
-KERNEL_CONFIG_USE_FRAGMENTS = 1
+KERNEL_CONFIG_USE_FRAGMENTS = 0
 
 # Whether to use diffconfig to generate the device-specific configuration.
 KERNEL_CONFIG_USE_DIFFCONFIG = 0
@@ -127,16 +127,19 @@ BUILD_TRIPLET = aarch64-linux-android-
 BUILD_CLANG_TRIPLET = aarch64-linux-gnu-
 
 # The compiler to use.
-BUILD_CC = aarch64-linux-android-gcc-4.9
+BUILD_CC = clang
 
 # Set to 1 to skip modules packaging if CONFIG_MODULES is disabled in defconfig
 BUILD_SKIP_MODULES = 0
 
-# clang is not used; prevent the snippet from auto-adding it to DEB_TOOLCHAIN
-CLANG_CUSTOM = 1
-
-# (Unused with GCC) kept for reference only
+# Set clang version
 CLANG_VERSION = 14.0-r450784d
+
+# Set to 1 to use a manually installed toolchain
+CLANG_CUSTOM = 0
+
+# Extra paths to prepend to the PATH variable.
+BUILD_PATH = /usr/lib/llvm-android-$(CLANG_VERSION)/bin
 
 # Extra packages to add to the Build-Depends section.
 DEB_TOOLCHAIN = linux-initramfs-halium-generic:arm64, binutils-aarch64-linux-gnu, crossbuild-essential-arm64, gcc-4.9-aarch64-linux-android, g++-4.9-aarch64-linux-android, libgcc-4.9-dev-aarch64-linux-android-cross, lz4

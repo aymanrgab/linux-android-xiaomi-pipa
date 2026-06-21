@@ -26,8 +26,9 @@ Build-Depends: build-essential,
                lz4,
                linux-initramfs-halium-generic:arm64,
                binutils-aarch64-linux-gnu,
-                crossbuild-essential-arm64,
-                gcc-4.9-aarch64-linux-android,
+               crossbuild-essential-arm64,
+               clang-android-14.0-r450784d,
+               gcc-4.9-aarch64-linux-android,
                g++-4.9-aarch64-linux-android,
                libgcc-4.9-dev-aarch64-linux-android-cross
 Standards-Version: 4.5.0.3
