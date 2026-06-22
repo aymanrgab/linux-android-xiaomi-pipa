@@ -478,18 +478,7 @@ int sde_wb_get_output_roi(struct sde_wb_device *wb_dev, struct sde_rect *roi)
 
 u32 sde_wb_get_num_of_displays(void)
 {
-	u32 count = 0;
-	struct sde_wb_device *wb_dev;
-
-	SDE_DEBUG("\n");
-
-	mutex_lock(&sde_wb_list_lock);
-	list_for_each_entry(wb_dev, &sde_wb_list, wb_list) {
-		count++;
-	}
-	mutex_unlock(&sde_wb_list_lock);
-
-	return count;
+	return 0;
 }
 
 int wb_display_get_displays(void **display_array, u32 max_display_count)
