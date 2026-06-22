@@ -48,7 +48,8 @@ KERNEL_DEFCONFIG = vendor/pipa_defconfig
 KERNEL_IMAGE_WITH_DTB = 0
 
 # Whether to include a DTB Overlay. Use 0 (no) or 1.
-# Still build overlays and pack into dtbo.img for the bootloader.
+# Kept at 1 so the snippet packages dtbo.img; actual dtbo.img is
+# provided as prebuilt (droidian/dtbo.img), not compiled from source.
 KERNEL_IMAGE_WITH_DTB_OVERLAY = 1
 
 # Whether to merge DTB + Overlay into the kernel image at build time.

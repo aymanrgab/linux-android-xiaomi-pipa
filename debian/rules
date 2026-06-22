@@ -2,11 +2,10 @@
 
 include /usr/share/linux-packaging-snippets/kernel-snippet.mk
 
-# Override dtbo.img rule to add AVB footer after building.
-# Keeps the snippet's prerequisites (out/dtb-stamp), replaces the recipe
-# to also run avbtool for verified boot compatibility.
-out/KERNEL_OBJ/dtbo.img: $(CURDIR)/debian/avb-testkey.pem
-	mkdtboimg cfg_create $@ $(KERNEL_IMAGE_DTB_OVERLAY_CONFIGURATION) --dtb-dir $(KERNEL_OUT)/$(KERNEL_IMAGE_DTB_OVERLAY_DTB_DIRECTORY)
+# Use prebuilt dtbo.img from droidian/ instead of compiling DTS from source.
+# Adds AVB footer for verified boot compatibility.
+out/KERNEL_OBJ/dtbo.img: $(CURDIR)/droidian/dtbo.img $(CURDIR)/debian/avb-testkey.pem
+	cp $< $@
 	avbtool add_hash_footer --image $@ \
 		--partition_name dtbo \
 		--partition_size 33554432 \
