@@ -3871,6 +3871,9 @@ static int32_t nvt_ts_resume(struct device *dev)
 
 	switch_pen_input_device();
 
+	NVT_LOG("Re-enabling IRQ at end of resume\n");
+	nvt_irq_enable(true);
+
 	NVT_LOG("end\n");
 
 	if (ts->dev_pm_suspend)
