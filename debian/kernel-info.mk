@@ -107,6 +107,12 @@ FLASH_IS_AONLY = 0
 FLASH_IS_LEGACY_DEVICE = 0
 FLASH_IS_EXYNOS = 0
 
+# Device manufacturer. Checked against ro.product.vendor.manufacturer.
+FLASH_INFO_MANUFACTURER = Xiaomi
+
+# Device model. Checked against ro.product.vendor.model.
+FLASH_INFO_MODEL = pipa
+
 # Device CPU. This will be grepped against /proc/cpuinfo.
 FLASH_INFO_CPU = Qualcomm Technologies, Inc SM8250 (Snapdragon 870)
 
