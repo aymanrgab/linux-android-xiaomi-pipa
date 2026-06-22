@@ -44,17 +44,15 @@ KERNEL_CONFIG_USE_DIFFCONFIG = 0
 KERNEL_DEFCONFIG = vendor/pipa_defconfig
 
 # Whether to include DTBs with the image. Use 0 (no) or 1.
-KERNEL_IMAGE_WITH_DTB = 1
+# Set to 0 — uses dtbo.img for device tree (stock Xiaomi boot flow).
+KERNEL_IMAGE_WITH_DTB = 0
 
 # Whether to include a DTB Overlay. Use 0 (no) or 1.
+# Still build overlays and pack into dtbo.img for the bootloader.
 KERNEL_IMAGE_WITH_DTB_OVERLAY = 1
 
 # Whether to merge DTB + Overlay into the kernel image at build time.
 KERNEL_IMAGE_WITH_DTB_OVERLAY_IN_KERNEL = 0
-
-# Specify DTB file to include (relative to KERNEL_OUT).
-# Base SoC DTB for SM8250 v2.1 (which pipa uses per qcom,msm-id).
-KERNEL_IMAGE_DTB = arch/arm64/boot/dts/vendor/qcom/kona-v2.1.dtb
 
 # Specify DTB Overlay file to include (relative to KERNEL_OUT).
 # Merged with the base DTB via ufdt_apply_overlay to produce the pipa device tree.
