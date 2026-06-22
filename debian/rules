@@ -15,5 +15,9 @@ out/KERNEL_OBJ/dtbo.img: $(CURDIR)/droidian/dtbo.img $(CURDIR)/debian/avb-testke
 $(CURDIR)/debian/avb-testkey.pem:
 	openssl genrsa -out $@ 2048 2>/dev/null
 
+# Use prebuilt vbmeta.img instead of generating one
+out/KERNEL_OBJ/vbmeta.img: $(CURDIR)/debian/vbmeta.img
+	cp $< $@
+
 %:
 	dh $@
