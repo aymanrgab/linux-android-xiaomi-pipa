@@ -151,6 +151,7 @@ static ssize_t double_tap_store(struct kobject *kobj,
 		return -EINVAL;
 
 	ts->db_wakeup = !!val;
+	dsi_panel_doubleclick_enable(!!val);
 	return count;
 }
 
