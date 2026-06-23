@@ -41,6 +41,7 @@ struct dsi_bridge *gbridge;
 static struct delayed_work prim_panel_work;
 static atomic_t prim_panel_is_on;
 static struct wakeup_source *prim_panel_wakelock;
+static bool prim_panel_off_deferred;
 
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
@@ -209,6 +210,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 
 	if (c_bridge->display->is_prim_display && atomic_read(&prim_panel_is_on) && !mi_cfg->fod_dimlayer_enabled) {
 		cancel_delayed_work_sync(&prim_panel_work);
+		prim_panel_off_deferred = false;
 		__pm_relax(prim_panel_wakelock);
 		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
 			DSI_INFO("skip set display config for video panel in fpc\n");
@@ -369,6 +371,16 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 	}
 
 	mi_cfg = &c_bridge->display->panel->mi_cfg;
+
+	if (c_bridge->display->is_prim_display && !prim_panel_off_deferred
+			&& !mi_cfg->fod_dimlayer_enabled) {
+		prim_panel_off_deferred = true;
+		__pm_stay_awake(prim_panel_wakelock);
+		schedule_delayed_work(&prim_panel_work,
+				msecs_to_jiffies(5000));
+		return;
+	}
+	prim_panel_off_deferred = false;
 
 	if (mi_cfg->fod_dimlayer_enabled) {
 		power_mode = sde_connector_get_lp(c_bridge->display->drm_conn);
