@@ -2,6 +2,7 @@
 
 &pm8150l_flash0 {
 	qcom,max-current = <500>;
+	qcom,current-ma = <380>;
 };
 &pm8150l_torch0 {
 	qcom,max-current = <300>;
