@@ -212,6 +212,13 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		cancel_delayed_work_sync(&prim_panel_work);
 		prim_panel_off_deferred = false;
 		__pm_relax(prim_panel_wakelock);
+
+		power_mode = MI_DRM_BLANK_UNBLANK;
+		notify_data.data = &power_mode;
+		notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
+		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
+		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
+
 		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
 			DSI_INFO("skip set display config for video panel in fpc\n");
 			return;
