@@ -414,7 +414,7 @@ int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
 
 	c_conn = to_sde_connector(connector);
 	wb_dev->connector = connector;
-	wb_dev->detect_status = connector_status_connected;
+	wb_dev->detect_status = connector_status_disconnected;
 
 	/*
 	 * Add extra connector properties
