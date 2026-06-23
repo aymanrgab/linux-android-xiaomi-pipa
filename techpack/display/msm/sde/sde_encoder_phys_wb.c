@@ -701,9 +701,9 @@ static int sde_encoder_phys_wb_atomic_check(
 		return -EINVAL;
 	} else if (conn_state->connector->status !=
 			connector_status_connected) {
-		SDE_ERROR("connector not connected %d\n",
+		SDE_DEBUG("connector not connected %d\n",
 				conn_state->connector->status);
-		return -EINVAL;
+		return 0;
 	}
 
 	clone_mode_curr = _sde_enc_phys_wb_detect_cwb(phys_enc, crtc_state);
@@ -733,8 +733,8 @@ static int sde_encoder_phys_wb_atomic_check(
 
 	fb = sde_wb_connector_state_get_output_fb(conn_state);
 	if (!fb) {
-		SDE_ERROR("no output framebuffer\n");
-		return -EINVAL;
+		SDE_DEBUG("no output framebuffer\n");
+		return 0;
 	}
 
 	SDE_DEBUG("[fb_id:%u][fb:%u,%u]\n", fb->base.id,
