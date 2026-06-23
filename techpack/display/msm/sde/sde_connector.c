@@ -1340,8 +1340,13 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	if (c_conn->bl_device) {
 		c_conn->bl_device->props.power = FB_BLANK_UNBLANK;
 		c_conn->bl_device->props.state &= ~BL_CORE_FBBLANK;
-		if (c_conn->bl_device->props.brightness != 0)
-			backlight_update_status(c_conn->bl_device);
+		if (!(display->panel->cur_mode->dsi_mode_flags & DSI_MODE_FLAG_DMS)
+			&& !(display->panel->cur_mode->dsi_mode_flags & DSI_MODE_FLAG_DMS_FPS)){
+			if(c_conn->bl_device->props.brightness != 0)
+			{
+				backlight_update_status(c_conn->bl_device);
+			}
+		}
 	}
 	c_conn->panel_dead = false;
 }
