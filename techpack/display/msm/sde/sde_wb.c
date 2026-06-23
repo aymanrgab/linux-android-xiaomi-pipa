@@ -414,7 +414,7 @@ int sde_wb_connector_post_init(struct drm_connector *connector, void *display)
 
 	c_conn = to_sde_connector(connector);
 	wb_dev->connector = connector;
-	wb_dev->detect_status = connector_status_connected;
+	wb_dev->detect_status = connector_status_disconnected;
 
 	/*
 	 * Add extra connector properties
@@ -478,7 +478,18 @@ int sde_wb_get_output_roi(struct sde_wb_device *wb_dev, struct sde_rect *roi)
 
 u32 sde_wb_get_num_of_displays(void)
 {
-	return 0;
+	u32 count = 0;
+	struct sde_wb_device *wb_dev;
+
+	SDE_DEBUG("\n");
+
+	mutex_lock(&sde_wb_list_lock);
+	list_for_each_entry(wb_dev, &sde_wb_list, wb_list) {
+		count++;
+	}
+	mutex_unlock(&sde_wb_list_lock);
+
+	return count;
 }
 
 int wb_display_get_displays(void **display_array, u32 max_display_count)
