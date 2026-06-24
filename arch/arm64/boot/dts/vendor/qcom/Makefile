@@ -32,6 +32,8 @@ pipa-sm8250-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 umi-sm8250-overlay.dtbo-base := kona.dtb kona-v2.dtb kona-v2.1.dtb
 
 endif # CONFIG_BUILD_ARM64_DT_OVERLAY
+
+dtb-$(CONFIG_ARCH_KONA) += kona.dtb kona-v2.dtb kona-v2.1.dtb
 endif # CONFIG_MACH_XIAOMI_SM8250
 
 else # CONFIG_MACH_XIAOMI
