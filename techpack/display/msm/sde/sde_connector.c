@@ -107,9 +107,12 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	if (brightness > display->panel->bl_config.bl_max_level)
 		brightness = display->panel->bl_config.bl_max_level;
 
-	/* map UI brightness into driver backlight level with rounding */
+	/* map UI brightness into driver backlight level with rounding
+	 * The Android Lights HAL encodes brightness as 8-bit ARGB,
+	 * so cap brightness_max_level at 255 to ensure proper scaling.
+	 */
 	bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
-			display->panel->bl_config.brightness_max_level);
+			min_t(u32, display->panel->bl_config.brightness_max_level, 255));
 
 	if (!bl_lvl && brightness)
 		bl_lvl = 1;
