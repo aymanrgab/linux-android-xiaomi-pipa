@@ -35,7 +35,7 @@ DEVICE_MODEL = pipa
 DEVICE_FULL_NAME = Xiaomi Pad 6
 
 # Whether to use configuration fragments to augment the kernel configuration.
-KERNEL_CONFIG_USE_FRAGMENTS = 1
+KERNEL_CONFIG_USE_FRAGMENTS = 0
 
 # Whether to use diffconfig to generate the device-specific configuration.
 KERNEL_CONFIG_USE_DIFFCONFIG = 0
