@@ -1697,13 +1697,18 @@ static int __mtp_setup(struct mtp_instance *fi_mtp)
 	struct mtp_dev *dev;
 	int ret;
 
+	if (_mtp_dev) {
+		if (fi_mtp)
+			fi_mtp->dev = _mtp_dev;
+		return 0;
+	}
+
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	if (!dev)
+		return -ENOMEM;
 
 	if (fi_mtp != NULL)
 		fi_mtp->dev = dev;
-
-	if (!dev)
-		return -ENOMEM;
 
 	spin_lock_init(&dev->lock);
 	init_waitqueue_head(&dev->read_wq);
@@ -1843,8 +1848,14 @@ struct usb_function_instance *alloc_inst_mtp_ptp(bool mtp_config)
 			pr_err("Error setting MTP\n");
 			return ERR_PTR(ret);
 		}
-	} else
-		fi_mtp->dev = _mtp_dev;
+	} else {
+		ret = __mtp_setup(fi_mtp);
+		if (ret) {
+			kfree(fi_mtp);
+			pr_err("Error setting PTP\n");
+			return ERR_PTR(ret);
+		}
+	}
 
 	config_group_init_type_name(&fi_mtp->func_inst.group,
 					"", &mtp_func_type);
