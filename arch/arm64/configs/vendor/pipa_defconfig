@@ -5771,7 +5771,9 @@ CONFIG_RAS=y
 #
 CONFIG_ANDROID=y
 CONFIG_ANDROID_BINDER_IPC=y
-CONFIG_ANDROID_BINDERFS=y
+# binderfs disabled — Waydroid HALIUM mode needs legacy /dev/anbox-binder names
+# which are suppressed when binderfs is enabled (see binder.c:binder_init)
+# CONFIG_ANDROID_BINDERFS is not set
 CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder,anbox-binder,anbox-hwbinder,anbox-vndbinder"
 # CONFIG_ANDROID_BINDER_IPC_SELFTEST is not set
 CONFIG_ANDROID_VENDOR_HOOKS=y

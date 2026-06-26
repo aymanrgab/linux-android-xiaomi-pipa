@@ -1651,6 +1651,32 @@ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
 		if (upid <= 0)
 			return -EINVAL;
 		break;
+	case P_PIDFD: {
+		struct fd f = fdget(upid);
+		struct pid *pidfd_pid;
+		if (!f.file)
+			return -EBADF;
+		if (f.file->f_op == &pidfd_fops)
+			pidfd_pid = get_pid(f.file->private_data);
+		else {
+			pidfd_pid = tgid_pidfd_to_pid(f.file);
+			if (IS_ERR(pidfd_pid)) {
+				ret = PTR_ERR(pidfd_pid);
+				fdput(f);
+				return ret;
+			}
+			pidfd_pid = get_pid(pidfd_pid);
+		}
+		fdput(f);
+		wo.wo_type = PIDTYPE_TGID;
+		wo.wo_pid = pidfd_pid;
+		wo.wo_flags = options;
+		wo.wo_info = infop;
+		wo.wo_rusage = ru;
+		ret = do_wait(&wo);
+		put_pid(pidfd_pid);
+		return ret;
+	}
 	default:
 		return -EINVAL;
 	}
