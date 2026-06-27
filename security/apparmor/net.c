@@ -152,7 +152,7 @@ void audit_net_cb(struct audit_buffer *ab, void *va)
 						aad(sa)->net.addrlen);
 			else
 				audit_unix_sk_addr(ab, "peer_addr",
-						   sa->u.net->peer_sk);
+						   sa->u.net->sk);
 		}
 	}
 	if (aad(sa)->peer) {
@@ -265,107 +265,6 @@ int aa_sock_file_perm(struct aa_label *label, const char *op, u32 request,
 	return af_select(sock->sk->sk_family,
 			 file_perm(label, op, request, sock),
 			 aa_label_sk_perm(label, op, request, sock->sk));
-}
-
-/* revaliation, get/set attr, shutdown */
-int aa_sock_perm(const char *op, u32 request, struct socket *sock)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 sock_perm(op, request, sock),
-			 aa_sk_perm(op, request, sock->sk));
-}
-
-int aa_sock_create_perm(struct aa_label *label, int family, int type,
-			int protocol)
-{
-	AA_BUG(!label);
-	AA_BUG(in_interrupt());
-
-	return af_select(family,
-			 create_perm(label, family, type, protocol),
-			 aa_af_perm(label, OP_CREATE, AA_MAY_CREATE, family,
-				    type, protocol));
-}
-
-int aa_sock_bind_perm(struct socket *sock, struct sockaddr *address,
-		      int addrlen)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!address);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 bind_perm(sock, address, addrlen),
-			 aa_sk_perm(OP_BIND, AA_MAY_BIND, sock->sk));
-}
-
-int aa_sock_connect_perm(struct socket *sock, struct sockaddr *address,
-			 int addrlen)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!address);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 connect_perm(sock, address, addrlen),
-			 aa_sk_perm(OP_CONNECT, AA_MAY_CONNECT, sock->sk));
-}
-
-int aa_sock_listen_perm(struct socket *sock, int backlog)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 listen_perm(sock, backlog),
-			 aa_sk_perm(OP_LISTEN, AA_MAY_LISTEN, sock->sk));
-}
-
-/* ability of sock to connect, not peer address binding */
-int aa_sock_accept_perm(struct socket *sock, struct socket *newsock)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!newsock);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 accept_perm(sock, newsock),
-			 aa_sk_perm(OP_ACCEPT, AA_MAY_ACCEPT, sock->sk));
-}
-
-/* sendmsg, recvmsg */
-int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
-		     struct msghdr *msg, int size)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!msg);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 msg_perm(op, request, sock, msg, size),
-			 aa_sk_perm(op, request, sock->sk));
-}
-
-/* revaliation, get/set attr, opt */
-int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock, int level,
-		     int optname)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 opt_perm(op, request, sock, level, optname),
-			 aa_sk_perm(op, request, sock->sk));
 }
 
 static int apparmor_secmark_init(struct aa_secmark *secmark)
