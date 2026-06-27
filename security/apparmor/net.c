@@ -175,6 +175,9 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 
 	if (profile_unconfined(profile))
 		return 0;
+	/* Profiles with inet-only network rules must not block D-Bus AF_UNIX */
+	if (family == AF_UNIX && !PROFILE_MEDIATES_AF(profile, AF_UNIX))
+		return 0;
 	state = PROFILE_MEDIATES(profile, AA_CLASS_NET);
 	if (state) {
 		buffer[0] = cpu_to_be16(family);
