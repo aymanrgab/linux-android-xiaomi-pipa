@@ -31,7 +31,6 @@
 #include <linux/zlib.h>
 #include <net/sock.h>
 
-#include "include/af_unix.h"
 #include "include/apparmor.h"
 #include "include/apparmorfs.h"
 #include "include/audit.h"
@@ -47,6 +46,11 @@
 #include "include/procattr.h"
 #include "include/mount.h"
 #include "include/secid.h"
+
+#define UNIX_ANONYMOUS(U)	(!unix_sk(U)->addr)
+#define UNIX_FS(U)		(!UNIX_ANONYMOUS(U) && \
+				 unix_sk(U)->addr->name->sun_path[0])
+#define unix_peer(sk)		(unix_sk(sk)->peer)
 
 /* Flag indicating whether initialization completed */
 int apparmor_initialized;
@@ -841,9 +845,7 @@ static int aa_sock_perm(const char *op, u32 request, struct socket *sock)
 	AA_BUG(!sock->sk);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 sock_perm(op, request, sock),
-			 aa_sk_perm(op, request, sock->sk));
+	return aa_sk_perm(op, request, sock->sk);
 }
 
 static int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
@@ -854,9 +856,7 @@ static int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
 	AA_BUG(!msg);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 msg_perm(op, request, sock, msg, size),
-			 aa_sk_perm(op, request, sock->sk));
+	return aa_sk_perm(op, request, sock->sk);
 }
 
 static int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock,
@@ -866,9 +866,7 @@ static int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock,
 	AA_BUG(!sock->sk);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 opt_perm(op, request, sock, level, optname),
-			 aa_sk_perm(op, request, sock->sk));
+	return aa_sk_perm(op, request, sock->sk);
 }
 
 /**
@@ -883,10 +881,8 @@ static int apparmor_socket_create(int family, int type, int protocol, int kern)
 
 	label = begin_current_label_crit_section();
 	if (!(kern || unconfined(label)))
-		error = af_select(family,
-				  create_perm(label, family, type, protocol),
-				  aa_af_perm(label, OP_CREATE, AA_MAY_CREATE,
-					     family, type, protocol));
+		error = aa_af_perm(label, OP_CREATE, AA_MAY_CREATE,
+				   family, type, protocol);
 	end_current_label_crit_section(label);
 
 	return error;
@@ -937,9 +933,7 @@ static int apparmor_socket_bind(struct socket *sock,
 	AA_BUG(!address);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 bind_perm(sock, address, addrlen),
-			 aa_sk_perm(OP_BIND, AA_MAY_BIND, sock->sk));
+	return aa_sk_perm(OP_BIND, AA_MAY_BIND, sock->sk);
 }
 
 /**
@@ -953,9 +947,7 @@ static int apparmor_socket_connect(struct socket *sock,
 	AA_BUG(!address);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 connect_perm(sock, address, addrlen),
-			 aa_sk_perm(OP_CONNECT, AA_MAY_CONNECT, sock->sk));
+	return aa_sk_perm(OP_CONNECT, AA_MAY_CONNECT, sock->sk);
 }
 
 /**
@@ -967,9 +959,7 @@ static int apparmor_socket_listen(struct socket *sock, int backlog)
 	AA_BUG(!sock->sk);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 listen_perm(sock, backlog),
-			 aa_sk_perm(OP_LISTEN, AA_MAY_LISTEN, sock->sk));
+	return aa_sk_perm(OP_LISTEN, AA_MAY_LISTEN, sock->sk);
 }
 
 /**
@@ -985,9 +975,7 @@ static int apparmor_socket_accept(struct socket *sock, struct socket *newsock)
 	AA_BUG(!newsock);
 	AA_BUG(in_interrupt());
 
-	return af_select(sock->sk->sk_family,
-			 accept_perm(sock, newsock),
-			 aa_sk_perm(OP_ACCEPT, AA_MAY_ACCEPT, sock->sk));
+	return aa_sk_perm(OP_ACCEPT, AA_MAY_ACCEPT, sock->sk);
 }
 
 /**
@@ -1212,14 +1200,14 @@ static int apparmor_unix_stream_connect(struct sock *sock, struct sock *other,
 	int error;
 
 	label = __begin_current_label_crit_section();
-	error = aa_unix_peer_perm(label, OP_CONNECT,
-				(AA_MAY_CONNECT | AA_MAY_SEND | AA_MAY_RECEIVE),
-				  sock, other, NULL);
+	error = aa_label_sk_perm(label, OP_CONNECT,
+				 (AA_MAY_CONNECT | AA_MAY_SEND | AA_MAY_RECEIVE),
+				 sock);
 	if (!UNIX_FS(other)) {
 		last_error(error,
-			aa_unix_peer_perm(peer_ctx->label, OP_CONNECT,
+			aa_label_sk_perm(peer_ctx->label, OP_CONNECT,
 				(AA_MAY_ACCEPT | AA_MAY_SEND | AA_MAY_RECEIVE),
-				other, sock, label));
+				other));
 	}
 	__end_current_label_crit_section(label);
 
@@ -1268,11 +1256,11 @@ static int apparmor_unix_may_send(struct socket *sock, struct socket *other)
 	int error;
 
 	label = __begin_current_label_crit_section();
-	error = xcheck(aa_unix_peer_perm(label, OP_SENDMSG, AA_MAY_SEND,
-					 sock->sk, other->sk, NULL),
-		       aa_unix_peer_perm(peer_ctx->label, OP_SENDMSG,
-					 AA_MAY_RECEIVE,
-					 other->sk, sock->sk, label));
+	error = xcheck(aa_label_sk_perm(label, OP_SENDMSG, AA_MAY_SEND,
+					sock->sk),
+		       aa_label_sk_perm(peer_ctx->label, OP_SENDMSG,
+					AA_MAY_RECEIVE,
+					other->sk));
 	__end_current_label_crit_section(label);
 
 	return error;
