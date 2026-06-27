@@ -708,8 +708,20 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 			cfg->fc_oif = nla_get_u32(attr);
 			break;
 		case RTA_GATEWAY:
-			cfg->fc_gw_family = AF_INET;
 			cfg->fc_gw4 = nla_get_be32(attr);
+			/*
+			 * Treat an all-zeros RTA_GATEWAY (0.0.0.0) as "no
+			 * gateway" instead of a real nexthop. NetworkManager's
+			 * L3 layer attaches a 0.0.0.0 gateway to directly
+			 * connected (scope link) routes; flagging that as
+			 * AF_INET sends it through fib_check_nh_v4_gw(), whose
+			 * FIB lookup for 0.0.0.0 fails with ENETUNREACH
+			 * ("Nexthop has invalid gateway"), so the route - and
+			 * therefore the default route depending on it - is
+			 * never installed.
+			 */
+			if (cfg->fc_gw4)
+				cfg->fc_gw_family = AF_INET;
 			break;
 		case RTA_VIA:
 			NL_SET_ERR_MSG(extack, "IPv4 does not support RTA_VIA attribute");
