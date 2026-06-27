@@ -28,6 +28,8 @@ static int aa_profile_unix_perm(struct aa_profile *profile,
 				struct common_audit_data *sa,
 				u32 request, struct sock *sk)
 {
+	if (!PROFILE_MEDIATES_AF(profile, AF_UNIX))
+		return 0;
 	return aa_profile_af_sk_perm(profile, sa, request, sk);
 }
 
@@ -36,6 +38,8 @@ static int aa_profile_unix_peer_perm(struct aa_profile *profile,
 				     u32 request, struct sock *sk,
 				     struct sock *peer_sk)
 {
+	if (!PROFILE_MEDIATES_AF(profile, AF_UNIX))
+		return 0;
 	return aa_profile_af_sk_perm(profile, sa, request, sk);
 }
 
