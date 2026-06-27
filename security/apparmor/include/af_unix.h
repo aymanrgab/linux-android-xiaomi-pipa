@@ -14,7 +14,6 @@
 #define __AA_AF_UNIX_H
 
 #include <net/af_unix.h>
-#include <net/unix.h>
 
 #include "label.h"
 
