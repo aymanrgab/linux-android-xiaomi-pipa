@@ -6101,7 +6101,7 @@ CONFIG_EVM=y
 # CONFIG_DEFAULT_SECURITY was 
 CONFIG_DEFAULT_SECURITY="apparmor"
 # CONFIG_DEFAULT_SECURITY_DAC is not set
-CONFIG_LSM="lockdown,integrity,apparmor,bpf"
+CONFIG_LSM="lockdown,integrity,selinux,apparmor,bpf"
 
 #
 # Kernel hardening options
