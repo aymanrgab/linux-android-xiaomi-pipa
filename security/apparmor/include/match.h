@@ -127,6 +127,8 @@ void aa_teardown_dfa_engine(void);
 struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags);
 unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
 			      const char *str, int len);
+unsigned int aa_dfa_match_af_explicit(struct aa_dfa *dfa, unsigned int start,
+				      u16 af);
 unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 			  const char *str);
 unsigned int aa_dfa_next(struct aa_dfa *dfa, unsigned int state,

@@ -231,14 +231,18 @@ static inline unsigned int PROFILE_MEDIATES(struct aa_profile *profile,
 static inline unsigned int PROFILE_MEDIATES_AF(struct aa_profile *profile,
 					       u16 AF) {
 	unsigned int state = PROFILE_MEDIATES(profile, AA_CLASS_NET);
-	__be16 be_af = cpu_to_be16(AF);
 
 	if (!state) {
 		state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT);
 		if (!state)
-			return 0;
+			return profile->net.allow[AF] ? 1 : 0;
 	}
-	return aa_dfa_match_len(profile->policy.dfa, state, (char *) &be_af, 2);
+
+	state = aa_dfa_match_af_explicit(profile->policy.dfa, state, AF);
+	if (state)
+		return state;
+
+	return profile->net.allow[AF] ? 1 : 0;
 }
 
 /**
