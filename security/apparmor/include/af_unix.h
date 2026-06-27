@@ -21,8 +21,6 @@
 #define unix_abstract_name_len(L) (unix_addr_len(L) - 1)
 #define unix_abstract_len(U) (unix_abstract_name_len((U)->addr->len))
 #define addr_unix_abstract_name(B) ((B)[0] == 0)
-#define addr_unix_anonymous(U) (addr_unix_len(U) <= 0)
-#define addr_unix_abstract(U) (!addr_unix_anonymous(U) && addr_unix_abstract_name((U)->addr))
 
 #define unix_addr(A) ((struct sockaddr_un *)(A))
 #define unix_addr_anon(A, L) ((A) && unix_addr_len(L) <= 0)

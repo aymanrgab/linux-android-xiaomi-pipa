@@ -275,11 +275,10 @@ int aa_unix_file_perm(struct aa_label *label, const char *op, u32 request,
 		      struct socket *sock)
 {
 	struct aa_profile *profile;
+	DEFINE_AUDIT_SK(sa, op, sock->sk);
 
 	if (!sock || !sock->sk)
 		return 0;
-
-	DEFINE_AUDIT_SK(sa, op, sock->sk);
 
 	return fn_for_each_confined(label, profile,
 			aa_profile_unix_file_perm(profile, &sa, request,
