@@ -22,6 +22,7 @@
 #include <linux/ctype.h>
 #include <linux/sysctl.h>
 #include <linux/audit.h>
+#include <linux/nsproxy.h>
 #include <linux/user_namespace.h>
 #include <net/af_unix.h>
 #include <linux/netfilter_ipv4.h>
@@ -519,6 +520,21 @@ static int apparmor_file_mprotect(struct vm_area_struct *vma,
 			   !(vma->vm_flags & VM_SHARED) ? MAP_PRIVATE : 0);
 }
 
+/*
+ * Host AppArmor mount rules apply only in the initial mount namespace.
+ * Halium/LXC runs Android in its own mount namespace where init must
+ * mount tmpfs (/linkerconfig), bind-mount images, etc.
+ */
+static bool aa_mnt_ns_mediated(void)
+{
+	struct nsproxy *nsproxy = current->nsproxy;
+
+	if (!nsproxy || !nsproxy->mnt_ns || !init_task.nsproxy)
+		return true;
+
+	return nsproxy->mnt_ns == init_task.nsproxy->mnt_ns;
+}
+
 static int apparmor_sb_mount(const char *dev_name, const struct path *path,
 			     const char *type, unsigned long flags, void *data)
 {
@@ -532,7 +548,7 @@ static int apparmor_sb_mount(const char *dev_name, const struct path *path,
 	flags &= ~AA_MS_IGNORE_MASK;
 
 	label = __begin_current_label_crit_section();
-	if (!unconfined(label)) {
+	if (!unconfined(label) && aa_mnt_ns_mediated()) {
 		if (flags & MS_REMOUNT)
 			error = aa_remount(label, path, flags, data);
 		else if (flags & MS_BIND)
@@ -557,7 +573,7 @@ static int apparmor_sb_umount(struct vfsmount *mnt, int flags)
 	int error = 0;
 
 	label = __begin_current_label_crit_section();
-	if (!unconfined(label))
+	if (!unconfined(label) && aa_mnt_ns_mediated())
 		error = aa_umount(label, mnt, flags);
 	__end_current_label_crit_section(label);
 
@@ -571,7 +587,7 @@ static int apparmor_sb_pivotroot(const struct path *old_path,
 	int error = 0;
 
 	label = aa_get_current_label();
-	if (!unconfined(label))
+	if (!unconfined(label) && aa_mnt_ns_mediated())
 		error = aa_pivotroot(label, old_path, new_path);
 	aa_put_label(label);
 
