@@ -23,6 +23,7 @@
 #include <linux/sysctl.h>
 #include <linux/audit.h>
 #include <linux/nsproxy.h>
+#include <linux/pid_namespace.h>
 #include <linux/user_namespace.h>
 #include <net/af_unix.h>
 #include <linux/netfilter_ipv4.h>
@@ -521,9 +522,10 @@ static int apparmor_file_mprotect(struct vm_area_struct *vma,
 }
 
 /*
- * Host AppArmor mount rules apply only in the initial mount namespace.
- * Halium/LXC runs Android in its own mount namespace where init must
- * mount tmpfs (/linkerconfig), bind-mount images, etc.
+ * Host AppArmor mount rules apply only in the initial pid and mount
+ * namespaces.  Halium/LXC may keep the host mount namespace
+ * (lxc.namespace.keep) while giving Android its own pid namespace, where
+ * init must mount tmpfs (/linkerconfig), bind-mount images, etc.
  */
 static bool aa_mnt_ns_mediated(void)
 {
@@ -532,7 +534,15 @@ static bool aa_mnt_ns_mediated(void)
 	if (!nsproxy || !nsproxy->mnt_ns || !init_task.nsproxy)
 		return true;
 
-	return nsproxy->mnt_ns == init_task.nsproxy->mnt_ns;
+	if (nsproxy->mnt_ns != init_task.nsproxy->mnt_ns)
+		return false;
+
+#ifdef CONFIG_PID_NS
+	if (task_active_pid_ns(current) != &init_pid_ns)
+		return false;
+#endif
+
+	return true;
 }
 
 static int apparmor_sb_mount(const char *dev_name, const struct path *path,
