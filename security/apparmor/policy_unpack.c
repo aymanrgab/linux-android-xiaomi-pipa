@@ -37,7 +37,7 @@
 
 #define v5	5	/* base version */
 #define v6	6	/* per entry policydb mediation check */
-#define v7	7
+#define v7	7	/* v2 compat networking */
 #define v8	8	/* full network masking */
 
 /*
@@ -834,6 +834,38 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 	if (!unpack_secmark(e, profile)) {
 		info = "failed to unpack profile secmark rules";
 		goto fail;
+	}
+
+	info = "failed to unpack network compat rules";
+	{
+		int i;
+		size_t size = unpack_array(e, "net_allowed_af");
+
+		if (size || VERSION_LT(e->version, v8)) {
+			for (i = 0; i < size; i++) {
+				u16 tmp;
+
+				if (i >= AF_MAX) {
+					if (!unpack_u16(e, &tmp, NULL) ||
+					    !unpack_u16(e, &tmp, NULL) ||
+					    !unpack_u16(e, &tmp, NULL))
+						goto fail;
+					continue;
+				}
+				if (!unpack_u16(e, &profile->net.allow[i], NULL))
+					goto fail;
+				if (!unpack_u16(e, &profile->net.audit[i], NULL))
+					goto fail;
+				if (!unpack_u16(e, &profile->net.quiet[i], NULL))
+					goto fail;
+			}
+			if (size && !unpack_nameX(e, AA_ARRAYEND, NULL))
+				goto fail;
+			if (VERSION_LT(e->version, v7)) {
+				profile->net.allow[AF_UNIX] = 0xffff;
+				profile->net.allow[AF_NETLINK] = 0xffff;
+			}
+		}
 	}
 
 	info = "failed to unpack network rules";

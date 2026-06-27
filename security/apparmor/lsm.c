@@ -783,6 +783,7 @@ static void apparmor_sk_free_security(struct sock *sk)
 	SK_CTX(sk) = NULL;
 	aa_put_label(ctx->label);
 	aa_put_label(ctx->peer);
+	path_put(&ctx->path);
 	kfree(ctx);
 }
 
@@ -802,6 +803,8 @@ static void apparmor_sk_clone_security(const struct sock *sk,
 	if (new->peer)
 		aa_put_label(new->peer);
 	new->peer = aa_get_label(ctx->peer);
+	new->path = ctx->path;
+	path_get(&new->path);
 }
 
 /**
@@ -977,18 +980,23 @@ static int apparmor_socket_sock_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 static struct aa_label *sk_peer_label(struct sock *sk)
 {
+	struct sock *peer_sk;
 	struct aa_sk_ctx *ctx = SK_CTX(sk);
 
 	if (ctx->peer)
 		return ctx->peer;
 
-	if (sk->sk_family == AF_UNIX) {
-		struct unix_sock *u = unix_sk(sk);
-		if (u->peer)
-		{
-			struct aa_sk_ctx *pctx = SK_CTX(u->peer);
-			return pctx->label;
-		}
+	if (sk->sk_family != PF_UNIX)
+		return ERR_PTR(-ENOPROTOOPT);
+
+	/* check for sockpair peering which does not go through
+	 * security_unix_stream_connect
+	 */
+	peer_sk = unix_peer(sk);
+	if (peer_sk) {
+		ctx = SK_CTX(peer_sk);
+		if (ctx->label)
+			return ctx->label;
 	}
 
 	return ERR_PTR(-ENOPROTOOPT);
@@ -1085,35 +1093,93 @@ static int apparmor_inet_conn_request(struct sock *sk, struct sk_buff *skb,
 				      skb->secmark, sk);
 }
 
+static struct path *UNIX_FS_CONN_PATH(struct sock *sk, struct sock *newsk)
+{
+	if (sk->sk_family == PF_UNIX && UNIX_FS(sk))
+		return &unix_sk(sk)->path;
+	else if (newsk->sk_family == PF_UNIX && UNIX_FS(newsk))
+		return &unix_sk(newsk)->path;
+	return NULL;
+}
+
+/**
+ * apparmor_unix_stream_connect - check perms before making unix domain conn
+ *
+ * peer is locked when this hook is called
+ */
 static int apparmor_unix_stream_connect(struct sock *sock, struct sock *other,
 					struct sock *newsk)
 {
-	struct aa_label *label, *peer;
-	struct aa_sk_ctx *pctx;
+	struct aa_sk_ctx *sk_ctx = SK_CTX(sock);
+	struct aa_sk_ctx *peer_ctx = SK_CTX(other);
+	struct aa_sk_ctx *new_ctx = SK_CTX(newsk);
+	struct aa_label *label;
+	struct path *path;
 	int error;
 
-	label = begin_current_label_crit_section();
-	pctx = SK_CTX(other);
-	peer = pctx->label;
-	error = aa_unix_peer_perm(label, OP_CONNECT, AA_MAY_CONNECT, sock,
-				  other, peer);
-	end_current_label_crit_section(label);
+	label = __begin_current_label_crit_section();
+	error = aa_unix_peer_perm(label, OP_CONNECT,
+				(AA_MAY_CONNECT | AA_MAY_SEND | AA_MAY_RECEIVE),
+				  sock, other, NULL);
+	if (!UNIX_FS(other)) {
+		last_error(error,
+			aa_unix_peer_perm(peer_ctx->label, OP_CONNECT,
+				(AA_MAY_ACCEPT | AA_MAY_SEND | AA_MAY_RECEIVE),
+				other, sock, label));
+	}
+	__end_current_label_crit_section(label);
 
-	return error;
+	if (error)
+		return error;
+
+	/* label newsk if it wasn't labeled in post_create. Normally this
+	 * would be done in sock_graft, but because we are directly looking
+	 * at the peer_sk to obtain peer_labeling for unix socks this
+	 * does not work
+	 */
+	if (!new_ctx->label)
+		new_ctx->label = aa_get_label(peer_ctx->label);
+
+	/* Cross reference the peer labels for SO_PEERSEC */
+	if (new_ctx->peer)
+		aa_put_label(new_ctx->peer);
+
+	if (sk_ctx->peer)
+		aa_put_label(sk_ctx->peer);
+
+	new_ctx->peer = aa_get_label(sk_ctx->label);
+	sk_ctx->peer = aa_get_label(peer_ctx->label);
+
+	path = UNIX_FS_CONN_PATH(sock, other);
+	if (path) {
+		new_ctx->path = *path;
+		sk_ctx->path = *path;
+		path_get(path);
+		path_get(path);
+	}
+	return 0;
 }
 
+/**
+ * apparmor_unix_may_send - check perms before conn or sending unix dgrams
+ *
+ * other is locked when this hook is called
+ *
+ * dgram connect calls may_send, peer setup but path not copied?????
+ */
 static int apparmor_unix_may_send(struct socket *sock, struct socket *other)
 {
-	struct aa_label *label, *peer;
-	struct aa_sk_ctx *pctx;
+	struct aa_sk_ctx *peer_ctx = SK_CTX(other->sk);
+	struct aa_label *label;
 	int error;
 
-	label = begin_current_label_crit_section();
-	pctx = SK_CTX(other->sk);
-	peer = pctx->label;
-	error = aa_unix_peer_perm(label, OP_SENDMSG, AA_MAY_SEND, sock->sk,
-				  other->sk, peer);
-	end_current_label_crit_section(label);
+	label = __begin_current_label_crit_section();
+	error = xcheck(aa_unix_peer_perm(label, OP_SENDMSG, AA_MAY_SEND,
+					 sock->sk, other->sk, NULL),
+		       aa_unix_peer_perm(peer_ctx->label, OP_SENDMSG,
+					 AA_MAY_RECEIVE,
+					 other->sk, sock->sk, label));
+	__end_current_label_crit_section(label);
 
 	return error;
 }

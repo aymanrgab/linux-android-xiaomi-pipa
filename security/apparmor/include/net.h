@@ -109,6 +109,7 @@ struct aa_net {
 };
 
 extern struct aa_sfs_entry aa_sfs_entry_network[];
+extern struct aa_sfs_entry aa_sfs_entry_network_compat[];
 
 void audit_net_cb(struct audit_buffer *ab, void *va);
 int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
