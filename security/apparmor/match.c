@@ -440,6 +440,36 @@ unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
 }
 
 /**
+ * aa_dfa_match_af_explicit - match @af in network DFA if explicitly ruled
+ * @dfa: policy dfa (NOT NULL)
+ * @start: network class start state
+ * @af: address family to match
+ *
+ * DFA default transitions land in a non-zero state even when @af has no
+ * explicit rule. Compare against an unlisted AF to detect that case.
+ *
+ * Returns: state after matching @af if explicitly ruled, 0 otherwise
+ */
+unsigned int aa_dfa_match_af_explicit(struct aa_dfa *dfa, unsigned int start,
+				      u16 af)
+{
+	__be16 be_af = cpu_to_be16(af);
+	__be16 be_unknown = cpu_to_be16(0xffff);
+	unsigned int af_state, unknown_state;
+
+	if (!start)
+		return 0;
+
+	af_state = aa_dfa_match_len(dfa, start, (char *)&be_af, 2);
+	unknown_state = aa_dfa_match_len(dfa, start, (char *)&be_unknown, 2);
+
+	if (!af_state || af_state == unknown_state)
+		return 0;
+
+	return af_state;
+}
+
+/**
  * aa_dfa_match - traverse @dfa to find state @str stops at
  * @dfa: the dfa to match @str against  (NOT NULL)
  * @start: the state of the dfa to start matching in
