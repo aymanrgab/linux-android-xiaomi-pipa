@@ -26,7 +26,9 @@
 #include <linux/netfilter_ipv4.h>
 #include <linux/netfilter_ipv6.h>
 #include <net/sock.h>
+#include <net/unix.h>
 
+#include "include/af_unix.h"
 #include "include/apparmor.h"
 #include "include/apparmorfs.h"
 #include "include/audit.h"
@@ -815,10 +817,7 @@ static int apparmor_socket_create(int family, int type, int protocol, int kern)
 
 	label = begin_current_label_crit_section();
 	if (!(kern || unconfined(label)))
-		error = af_select(family,
-				  create_perm(label, family, type, protocol),
-				  aa_af_perm(label, OP_CREATE, AA_MAY_CREATE,
-					     family, type, protocol));
+		error = aa_sock_create_perm(label, family, type, protocol);
 	end_current_label_crit_section(label);
 
 	return error;
@@ -864,14 +863,7 @@ static int apparmor_socket_post_create(struct socket *sock, int family,
 static int apparmor_socket_bind(struct socket *sock,
 				struct sockaddr *address, int addrlen)
 {
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!address);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 bind_perm(sock, address, addrlen),
-			 aa_sk_perm(OP_BIND, AA_MAY_BIND, sock->sk));
+	return aa_sock_bind_perm(sock, address, addrlen);
 }
 
 /**
@@ -880,14 +872,7 @@ static int apparmor_socket_bind(struct socket *sock,
 static int apparmor_socket_connect(struct socket *sock,
 				   struct sockaddr *address, int addrlen)
 {
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!address);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 connect_perm(sock, address, addrlen),
-			 aa_sk_perm(OP_CONNECT, AA_MAY_CONNECT, sock->sk));
+	return aa_sock_connect_perm(sock, address, addrlen);
 }
 
 /**
@@ -895,13 +880,7 @@ static int apparmor_socket_connect(struct socket *sock,
  */
 static int apparmor_socket_listen(struct socket *sock, int backlog)
 {
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 listen_perm(sock, backlog),
-			 aa_sk_perm(OP_LISTEN, AA_MAY_LISTEN, sock->sk));
+	return aa_sock_listen_perm(sock, backlog);
 }
 
 /**
@@ -912,27 +891,7 @@ static int apparmor_socket_listen(struct socket *sock, int backlog)
  */
 static int apparmor_socket_accept(struct socket *sock, struct socket *newsock)
 {
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!newsock);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 accept_perm(sock, newsock),
-			 aa_sk_perm(OP_ACCEPT, AA_MAY_ACCEPT, sock->sk));
-}
-
-static int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
-			    struct msghdr *msg, int size)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(!msg);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 msg_perm(op, request, sock, msg, size),
-			 aa_sk_perm(op, request, sock->sk));
+	return aa_sock_accept_perm(sock, newsock);
 }
 
 /**
@@ -953,18 +912,6 @@ static int apparmor_socket_recvmsg(struct socket *sock,
 	return aa_sock_msg_perm(OP_RECVMSG, AA_MAY_RECEIVE, sock, msg, size);
 }
 
-/* revaliation, get/set attr, shutdown */
-static int aa_sock_perm(const char *op, u32 request, struct socket *sock)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 sock_perm(op, request, sock),
-			 aa_sk_perm(op, request, sock->sk));
-}
-
 /**
  * apparmor_socket_getsockname - check perms before getting the local address
  */
@@ -979,19 +926,6 @@ static int apparmor_socket_getsockname(struct socket *sock)
 static int apparmor_socket_getpeername(struct socket *sock)
 {
 	return aa_sock_perm(OP_GETPEERNAME, AA_MAY_GETATTR, sock);
-}
-
-/* revaliation, get/set attr, opt */
-static int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock,
-			    int level, int optname)
-{
-	AA_BUG(!sock);
-	AA_BUG(!sock->sk);
-	AA_BUG(in_interrupt());
-
-	return af_select(sock->sk->sk_family,
-			 opt_perm(op, request, sock, level, optname),
-			 aa_sk_perm(op, request, sock->sk));
 }
 
 /**
@@ -1048,6 +982,12 @@ static struct aa_label *sk_peer_label(struct sock *sk)
 
 	if (ctx->peer)
 		return ctx->peer;
+
+	if (sk->sk_family == AF_UNIX) {
+		struct unix_sock *u = unix_sk(sk);
+		if (u->peer)
+			return SK_CTX(u->peer)->label;
+	}
 
 	return ERR_PTR(-ENOPROTOOPT);
 }
@@ -1143,6 +1083,35 @@ static int apparmor_inet_conn_request(struct sock *sk, struct sk_buff *skb,
 				      skb->secmark, sk);
 }
 
+static int apparmor_unix_stream_connect(struct sock *sk, struct sock *peer_sk,
+					struct socket *sock)
+{
+	struct aa_label *label, *peer;
+	int error;
+
+	label = begin_current_label_crit_section();
+	peer = SK_CTX(peer_sk)->label;
+	error = aa_unix_peer_perm(label, OP_CONNECT, AA_MAY_CONNECT, sk,
+				  peer_sk, peer);
+	end_current_label_crit_section(label);
+
+	return error;
+}
+
+static int apparmor_unix_may_send(struct socket *sock, struct socket *other)
+{
+	struct aa_label *label, *peer;
+	int error;
+
+	label = begin_current_label_crit_section();
+	peer = SK_CTX(other->sk)->label;
+	error = aa_unix_peer_perm(label, OP_SENDMSG, AA_MAY_SEND, sock->sk,
+				  other->sk, peer);
+	end_current_label_crit_section(label);
+
+	return error;
+}
+
 /*
  * The cred blob is a pointer to, not an instance of, an aa_label.
  */
@@ -1209,6 +1178,8 @@ static struct security_hook_list apparmor_hooks[] __lsm_ro_after_init = {
 	LSM_HOOK_INIT(socket_getpeersec_dgram,
 		      apparmor_socket_getpeersec_dgram),
 	LSM_HOOK_INIT(sock_graft, apparmor_sock_graft),
+	LSM_HOOK_INIT(unix_stream_connect, apparmor_unix_stream_connect),
+	LSM_HOOK_INIT(unix_may_send, apparmor_unix_may_send),
 	LSM_HOOK_INIT(inet_conn_request, apparmor_inet_conn_request),
 
 	LSM_HOOK_INIT(cred_alloc_blank, apparmor_cred_alloc_blank),

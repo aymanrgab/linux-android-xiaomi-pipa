@@ -53,6 +53,7 @@
 struct aa_sk_ctx {
 	struct aa_label *label;
 	struct aa_label *peer;
+	struct path path;
 };
 
 #define SK_CTX(X) ((X)->sk_security)
@@ -73,14 +74,20 @@ struct aa_sk_ctx {
 			 (SK)->sk_protocol)
 
 
-#define af_select(FAMILY, FN, DEF_FN)		\
-({						\
-	int __e;				\
-	switch ((FAMILY)) {			\
-	default:				\
-		__e = DEF_FN;			\
-	}					\
-	__e;					\
+#define __af_select(FAMILY, FN) FN
+
+#define af_select(FAMILY, FN, SK_FN)					\
+({									\
+	typeof(__af_select(FAMILY, FN)) __e;				\
+	switch ((FAMILY)) {						\
+	case AF_UNIX:							\
+		__e = __af_select(FAMILY, aa_unix_##FN);		\
+		break;							\
+	default:							\
+		__e = __af_select(FAMILY, SK_FN);			\
+		break;							\
+	}								\
+	__e;								\
 })
 
 struct aa_secmark {
@@ -88,6 +95,17 @@ struct aa_secmark {
 	u8 deny;
 	u32 secid;
 	char *label;
+};
+
+/* struct aa_net - network confinement data
+ * @allow: basic network families permissions
+ * @audit: which network permissions to force audit
+ * @quiet: which network permissions to quiet rejects
+ */
+struct aa_net {
+	u16 allow[AF_MAX];
+	u16 audit[AF_MAX];
+	u16 quiet[AF_MAX];
 };
 
 extern struct aa_sfs_entry aa_sfs_entry_network[];
@@ -107,6 +125,22 @@ static inline int aa_profile_af_sk_perm(struct aa_profile *profile,
 }
 int aa_sk_perm(const char *op, u32 request, struct sock *sk);
 
+int aa_sock_file_perm(struct aa_label *label, const char *op, u32 request,
+		      struct socket *sock);
+
+int aa_sock_perm(const char *op, u32 request, struct socket *sock);
+int aa_sock_create_perm(struct aa_label *label, int family, int type,
+			int protocol);
+int aa_sock_bind_perm(struct socket *sock, struct sockaddr *address,
+		      int addrlen);
+int aa_sock_connect_perm(struct socket *sock, struct sockaddr *address,
+			 int addrlen);
+int aa_sock_listen_perm(struct socket *sock, int backlog);
+int aa_sock_accept_perm(struct socket *sock, struct socket *newsock);
+int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
+		     struct msghdr *msg, int size);
+int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock, int level,
+		     int optname);
 int aa_sock_file_perm(struct aa_label *label, const char *op, u32 request,
 		      struct socket *sock);
 

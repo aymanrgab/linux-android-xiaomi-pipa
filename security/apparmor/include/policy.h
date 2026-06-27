@@ -154,6 +154,7 @@ struct aa_profile {
 	char **xattrs;
 
 	struct aa_rlimit rlimits;
+	struct aa_net net;
 
 	int secmark_count;
 	struct aa_secmark *secmark;

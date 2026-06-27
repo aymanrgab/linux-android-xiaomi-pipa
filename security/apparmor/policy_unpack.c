@@ -310,6 +310,24 @@ static bool unpack_u8(struct aa_ext *e, u8 *data, const char *name)
 	return 0;
 }
 
+static bool unpack_u16(struct aa_ext *e, u16 *data, const char *name)
+{
+	void *pos = e->pos;
+
+	if (unpack_nameX(e, AA_U16, name)) {
+		if (!inbounds(e, sizeof(u16)))
+			goto fail;
+		if (data)
+			*data = le16_to_cpu(get_unaligned((__le16 *) e->pos));
+		e->pos += sizeof(u16);
+		return 1;
+	}
+
+fail:
+	e->pos = pos;
+	return 0;
+}
+
 static bool unpack_u32(struct aa_ext *e, u32 *data, const char *name)
 {
 	void *pos = e->pos;
@@ -816,6 +834,26 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 	if (!unpack_secmark(e, profile)) {
 		info = "failed to unpack profile secmark rules";
 		goto fail;
+	}
+
+	info = "failed to unpack network rules";
+	if (unpack_nameX(e, AA_STRUCT, "net")) {
+		int i;
+
+		for (i = 0; i < AF_MAX; i++) {
+			if (!unpack_u16(e, &profile->net.allow[i], NULL))
+				goto fail;
+		}
+		for (i = 0; i < AF_MAX; i++) {
+			if (!unpack_u16(e, &profile->net.audit[i], NULL))
+				goto fail;
+		}
+		for (i = 0; i < AF_MAX; i++) {
+			if (!unpack_u16(e, &profile->net.quiet[i], NULL))
+				goto fail;
+		}
+		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+			goto fail;
 	}
 
 	if (unpack_nameX(e, AA_STRUCT, "policydb")) {

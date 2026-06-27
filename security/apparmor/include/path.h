@@ -24,6 +24,7 @@ enum path_flags {
 
 	PATH_DELEGATE_DELETED = 0x08000, /* delegate deleted files */
 	PATH_MEDIATE_DELETED = 0x10000,	 /* mediate deleted paths */
+	PATH_SOCK_COND = 0x20000,
 };
 
 int aa_path_name(const struct path *path, int flags, char *buffer,
