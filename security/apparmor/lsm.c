@@ -985,7 +985,10 @@ static struct aa_label *sk_peer_label(struct sock *sk)
 	if (sk->sk_family == AF_UNIX) {
 		struct unix_sock *u = unix_sk(sk);
 		if (u->peer)
-			return SK_CTX(u->peer)->label;
+		{
+			struct aa_sk_ctx *pctx = SK_CTX(u->peer);
+			return pctx->label;
+		}
 	}
 
 	return ERR_PTR(-ENOPROTOOPT);
@@ -1082,16 +1085,18 @@ static int apparmor_inet_conn_request(struct sock *sk, struct sk_buff *skb,
 				      skb->secmark, sk);
 }
 
-static int apparmor_unix_stream_connect(struct sock *sk, struct sock *peer_sk,
-					struct socket *sock)
+static int apparmor_unix_stream_connect(struct sock *sock, struct sock *other,
+					struct sock *newsk)
 {
 	struct aa_label *label, *peer;
+	struct aa_sk_ctx *pctx;
 	int error;
 
 	label = begin_current_label_crit_section();
-	peer = SK_CTX(peer_sk)->label;
-	error = aa_unix_peer_perm(label, OP_CONNECT, AA_MAY_CONNECT, sk,
-				  peer_sk, peer);
+	pctx = SK_CTX(other);
+	peer = pctx->label;
+	error = aa_unix_peer_perm(label, OP_CONNECT, AA_MAY_CONNECT, sock,
+				  other, peer);
 	end_current_label_crit_section(label);
 
 	return error;
@@ -1100,10 +1105,12 @@ static int apparmor_unix_stream_connect(struct sock *sk, struct sock *peer_sk,
 static int apparmor_unix_may_send(struct socket *sock, struct socket *other)
 {
 	struct aa_label *label, *peer;
+	struct aa_sk_ctx *pctx;
 	int error;
 
 	label = begin_current_label_crit_section();
-	peer = SK_CTX(other->sk)->label;
+	pctx = SK_CTX(other->sk);
+	peer = pctx->label;
 	error = aa_unix_peer_perm(label, OP_SENDMSG, AA_MAY_SEND, sock->sk,
 				  other->sk, peer);
 	end_current_label_crit_section(label);
