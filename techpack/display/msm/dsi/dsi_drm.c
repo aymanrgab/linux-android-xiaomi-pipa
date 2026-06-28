@@ -380,7 +380,8 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 	mi_cfg = &c_bridge->display->panel->mi_cfg;
 
 	if (c_bridge->display->is_prim_display && !prim_panel_off_deferred
-			&& !mi_cfg->fod_dimlayer_enabled) {
+			&& !mi_cfg->fod_dimlayer_enabled
+			&& !mi_cfg->tddi_doubleclick_flag) {
 		prim_panel_off_deferred = true;
 		__pm_stay_awake(prim_panel_wakelock);
 		schedule_delayed_work(&prim_panel_work,
