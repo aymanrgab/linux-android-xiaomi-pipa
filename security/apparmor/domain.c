@@ -750,7 +750,7 @@ static int profile_onexec(struct aa_profile *profile, struct aa_label *onexec,
 			  bool *secure_exec)
 {
 	unsigned int state = profile->file.start;
-	struct aa_perms perms = {};
+	struct aa_perms perms = {}, perms2 = {};
 	const char *xname = NULL, *info = "change_profile onexec";
 	int error = -EACCES;
 
@@ -795,6 +795,17 @@ static int profile_onexec(struct aa_profile *profile, struct aa_label *onexec,
 	state = aa_dfa_null_transition(profile->file.dfa, state);
 	error = change_profile_perms(profile, onexec, stack, AA_MAY_ONEXEC,
 				     state, &perms);
+	if (error) {
+		/* Null transition pairing may not exist for ix rules with
+		 * change_profile -> *. Fall back to direct change_profile
+		 * check from policy start (same as aa_change_profile does).
+		 */
+		error = change_profile_perms(profile, onexec, stack,
+					     AA_MAY_ONEXEC,
+					     profile->file.start, &perms2);
+		if (!error)
+			perms = perms2;
+	}
 	if (error) {
 		perms.allow &= ~AA_MAY_ONEXEC;
 		goto audit;
