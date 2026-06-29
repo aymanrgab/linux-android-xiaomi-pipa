@@ -682,6 +682,10 @@ static int apparmor_setprocattr(const char *name, void *value,
 		} else
 			goto fail;
 	} else if (strcmp(name, "exec") == 0) {
+		// #region agent log
+		pr_info("DEBUG7a2dfb hypothesis=B location=apparmor_setprocattr:exec cmd=%s pid=%d err_pending\n",
+			command, current->pid);
+		// #endregion
 		if (strcmp(command, "exec") == 0)
 			error = aa_change_profile(args, AA_CHANGE_ONEXEC);
 		else if (strcmp(command, "stack") == 0)
@@ -689,6 +693,10 @@ static int apparmor_setprocattr(const char *name, void *value,
 							 AA_CHANGE_STACK));
 		else
 			goto fail;
+		// #region agent log
+		pr_info("DEBUG7a2dfb hypothesis=B location=apparmor_setprocattr:exec cmd=%s pid=%d error=%d\n",
+			command, current->pid, error);
+		// #endregion
 	} else
 		/* only support the "current" and "exec" process attributes */
 		goto fail;

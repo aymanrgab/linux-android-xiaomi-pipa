@@ -493,9 +493,19 @@ int aa_move_mount(struct aa_label *label, const struct path *path,
 		return error;
 
 	get_buffers(buffer, old_buffer);
-	error = fn_for_each_confined(label, profile,
-			match_mnt(profile, path, buffer, &old_path, old_buffer,
-				  NULL, MS_MOVE, NULL, false));
+	/*
+	 * Snap mount namespace updates may move mounts that are detached
+	 * from the current namespace; skip path lookup for those.
+	 */
+	if (!our_mnt(old_path.mnt))
+		error = fn_for_each_confined(label, profile,
+				match_mnt(profile, path, buffer, NULL, NULL,
+					  NULL, MS_MOVE, NULL, false));
+	else
+		error = fn_for_each_confined(label, profile,
+				match_mnt(profile, path, buffer, &old_path,
+					  old_buffer, NULL, MS_MOVE, NULL,
+					  false));
 	put_buffers(buffer, old_buffer);
 	path_put(&old_path);
 
