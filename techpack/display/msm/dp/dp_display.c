@@ -783,16 +783,25 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 		goto skip_wait;
 
 	/*
-	 * Give userspace 30 seconds to respond (was 5).  Mir/Lomiri needs to
-	 * stop/restart the compositor which easily exceeds 5 seconds.
+	 * On Android/Ubuntu Touch, the DP display is not enabled by userspace
+	 * calling drmModeSetCrtc (which would complete notification_comp).
+	 * Lomiri only detects the uevent and reconfigures the internal DSI
+	 * panel; the external DP output is left unconfigured.  If we wait
+	 * for notification_comp here, it will always time out, causing the
+	 * driver to report a failed connection and initiate a disconnect
+	 * cycle that breaks the UI.
+	 *
+	 * Complete notification_comp immediately so the driver considers
+	 * the notification delivered.  The DP link stays trained and the
+	 * external display will show whatever userspace writes to it later
+	 * (via drmModeSetCrtc, drmModePageFlip, or DRM atomic commit).
 	 */
-	if (!wait_for_completion_timeout(&dp->notification_comp,
-						HZ * 30)) {
-		DP_WARN("%s timeout\n", hpd ? "connect" : "disconnect");
-		ret = -EINVAL;
+	if (!dp->mst.mst_active &&
+			(!!dp_display_state_is(DP_STATE_ENABLED) != hpd)) {
+		complete_all(&dp->notification_comp);
 	}
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state, hpd, ret);
-	return ret;
+	return 0;
 skip_wait:
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, dp->state, hpd, ret);
 	return 0;
