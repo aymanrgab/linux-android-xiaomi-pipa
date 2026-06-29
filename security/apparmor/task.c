@@ -67,6 +67,8 @@ static void aa_propagate_creds(struct cred *new)
 	rcu_read_unlock();
 }
 
+static void aa_propagate_onexec(struct aa_label *label, bool stack);
+
 /**
  * aa_set_current_onexec - set the tasks change_profile to happen onexec
  * @label: system label to set at exec  (MAYBE NULL to clear value)

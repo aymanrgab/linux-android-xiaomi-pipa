@@ -722,11 +722,16 @@ static void dp_display_send_hpd_event(struct dp_display_private *dp)
 	kobject_uevent_env(&dev->primary->kdev->kobj, KOBJ_CHANGE,
 			envp);
 
-	if (dev->mode_config.funcs->output_poll_changed)
-		dev->mode_config.funcs->output_poll_changed(dev);
-
-	drm_client_dev_hotplug(dev);
-
+	/*
+	 * On Ubuntu Touch / Lomiri there is no fbdev client.  Calling
+	 * output_poll_changed() triggers drm_fb_helper_hotplug_event() which
+	 * in turn calls drm_setup_crtcs(), a function that re-probes ALL
+	 * connectors and reassigns CRTCs.  This reassignment corrupts the
+	 * internal DSI panel configuration (it gets switched from 1800x2880
+	 * to the external monitor's resolution, e.g. 1920x1080), rendering
+	 * the tablet UI unusable.  Lomiri only needs the uevent above to
+	 * react to hotplug events, so skip the fbdev/client callbacks.
+	 */
 	if (connector->status == connector_status_connected) {
 		dp_display_state_add(DP_STATE_CONNECT_NOTIFIED);
 		dp_display_state_remove(DP_STATE_DISCONNECT_NOTIFIED);
@@ -777,8 +782,12 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp)
 			(!!dp_display_state_is(DP_STATE_ENABLED) == hpd))
 		goto skip_wait;
 
+	/*
+	 * Give userspace 30 seconds to respond (was 5).  Mir/Lomiri needs to
+	 * stop/restart the compositor which easily exceeds 5 seconds.
+	 */
 	if (!wait_for_completion_timeout(&dp->notification_comp,
-						HZ * 5)) {
+						HZ * 30)) {
 		DP_WARN("%s timeout\n", hpd ? "connect" : "disconnect");
 		ret = -EINVAL;
 	}
