@@ -18,6 +18,7 @@
 
 #include "include/cred.h"
 #include "include/task.h"
+#include <linux/sched/signal.h>
 
 /**
  * aa_get_task_label - Get another task's label
@@ -34,6 +35,79 @@ struct aa_label *aa_get_task_label(struct task_struct *task)
 	rcu_read_unlock();
 
 	return p;
+}
+
+/**
+ * aa_propagate_creds - propagate credential change to all threads in thread group
+ * @new: new credentials (already applied to current)
+ *
+ * After current's label has changed via commit_creds(new), update all other
+ * threads in the thread group so they share the same new credentials.
+ * This is needed because aa_change_profile only transitions the calling
+ * thread; Go multi-threaded programs (e.g. snap-update-ns) create threads
+ * before the profile transition, leaving them under the old profile.
+ */
+static void aa_propagate_creds(struct cred *new)
+{
+	struct task_struct *t;
+	const struct cred *old;
+
+	rcu_read_lock();
+	for_each_thread(current, t) {
+		if (t == current || (t->flags & PF_EXITING))
+			continue;
+		old = get_cred(t->real_cred);
+		get_cred(new);
+		get_cred(new);
+		rcu_assign_pointer(t->real_cred, new);
+		rcu_assign_pointer(t->cred, new);
+		put_cred(old);
+		put_cred(old);
+	}
+	rcu_read_unlock();
+}
+
+/**
+ * aa_set_current_onexec - set the tasks change_profile to happen onexec
+ * @label: system label to set at exec  (MAYBE NULL to clear value)
+ * @stack: whether stacking should be done
+ * Returns: 0 or error on failure
+ */
+int aa_set_current_onexec(struct aa_label *label, bool stack)
+{
+	struct aa_task_ctx *ctx = task_ctx(current);
+
+	aa_get_label(label);
+	aa_put_label(ctx->onexec);
+	ctx->onexec = label;
+	ctx->token = stack;
+
+	aa_propagate_onexec(label, stack);
+
+	return 0;
+}
+
+/**
+ * aa_propagate_onexec - propagate onexec label to all threads in thread group
+ * @label: label to set
+ * @stack: stacking flag
+ */
+static void aa_propagate_onexec(struct aa_label *label, bool stack)
+{
+	struct task_struct *t;
+	struct aa_task_ctx *ctx;
+
+	rcu_read_lock();
+	for_each_thread(current, t) {
+		if (t == current || (t->flags & PF_EXITING))
+			continue;
+		ctx = task_ctx(t);
+		aa_get_label(label);
+		aa_put_label(ctx->onexec);
+		ctx->onexec = label;
+		ctx->token = stack;
+	}
+	rcu_read_unlock();
 }
 
 /**
@@ -84,27 +158,10 @@ int aa_replace_current_label(struct aa_label *label)
 	set_cred_label(new, label);
 
 	commit_creds(new);
+	aa_propagate_creds(new);
 	return 0;
 }
 
-
-/**
- * aa_set_current_onexec - set the tasks change_profile to happen onexec
- * @label: system label to set at exec  (MAYBE NULL to clear value)
- * @stack: whether stacking should be done
- * Returns: 0 or error on failure
- */
-int aa_set_current_onexec(struct aa_label *label, bool stack)
-{
-	struct aa_task_ctx *ctx = task_ctx(current);
-
-	aa_get_label(label);
-	aa_put_label(ctx->onexec);
-	ctx->onexec = label;
-	ctx->token = stack;
-
-	return 0;
-}
 
 /**
  * aa_set_current_hat - set the current tasks hat
@@ -144,6 +201,7 @@ int aa_set_current_hat(struct aa_label *label, u64 token)
 	ctx->onexec = NULL;
 
 	commit_creds(new);
+	aa_propagate_creds(new);
 	return 0;
 }
 
@@ -178,6 +236,7 @@ int aa_restore_previous_label(u64 token)
 	aa_clear_task_ctx_trans(ctx);
 
 	commit_creds(new);
+	aa_propagate_creds(new);
 
 	return 0;
 }
