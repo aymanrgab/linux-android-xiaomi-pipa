@@ -783,7 +783,8 @@ static int profile_onexec(struct aa_profile *profile, struct aa_label *onexec,
 
 	/* find exec permissions for name */
 	state = aa_str_perms(profile->file.dfa, state, xname, cond, &perms);
-	if (!(perms.allow & AA_MAY_ONEXEC)) {
+	if (!(perms.allow & AA_MAY_ONEXEC) &&
+	    !(perms.xindex & AA_X_INHERIT)) {
 		info = "no change_onexec valid for executable";
 		goto audit;
 	}
