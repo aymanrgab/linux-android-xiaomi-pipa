@@ -74,6 +74,20 @@ struct aa_sk_ctx {
 			 (SK)->sk_protocol)
 
 
+#define af_select(FAMILY, FN, DEF_FN)					\
+({									\
+	int __e;							\
+	switch ((FAMILY)) {						\
+	case AF_UNIX:							\
+		__e = aa_unix_ ## FN;					\
+		break;							\
+	default:							\
+		__e = DEF_FN;						\
+		break;							\
+	}								\
+	__e;								\
+})
+
 struct aa_secmark {
 	u8 audit;
 	u8 deny;
@@ -109,8 +123,6 @@ static inline int aa_profile_af_sk_perm(struct aa_profile *profile,
 				  sk->sk_type);
 }
 int aa_sk_perm(const char *op, u32 request, struct sock *sk);
-int aa_label_sk_perm(struct aa_label *label, const char *op, u32 request,
-		     struct sock *sk);
 
 int aa_sock_file_perm(struct aa_label *label, const char *op, u32 request,
 		      struct socket *sock);

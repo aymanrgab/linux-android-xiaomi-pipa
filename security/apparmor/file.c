@@ -16,6 +16,7 @@
 #include <linux/fdtable.h>
 #include <linux/file.h>
 
+#include "include/af_unix.h"
 #include "include/apparmor.h"
 #include "include/audit.h"
 #include "include/cred.h"

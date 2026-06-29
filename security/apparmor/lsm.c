@@ -44,13 +44,9 @@
 #include "include/policy.h"
 #include "include/policy_ns.h"
 #include "include/procattr.h"
+#include "include/af_unix.h"
 #include "include/mount.h"
 #include "include/secid.h"
-
-#define UNIX_ANONYMOUS(U)	(!unix_sk(U)->addr)
-#define UNIX_FS(U)		(!UNIX_ANONYMOUS(U) && \
-				 unix_sk(U)->addr->name->sun_path[0])
-#define unix_peer(sk)		(unix_sk(sk)->peer)
 
 /* Flag indicating whether initialization completed */
 int apparmor_initialized;
@@ -612,25 +608,23 @@ static int apparmor_getprocattr(struct task_struct *task, char *name,
 				char **value)
 {
 	int error = -ENOENT;
-	/* released below */
-	const struct cred *cred = get_task_cred(task);
-	struct aa_task_ctx *ctx = task_ctx(current);
 	struct aa_label *label = NULL;
 
+	rcu_read_lock();
 	if (strcmp(name, "current") == 0)
-		label = aa_get_newest_label(cred_label(cred));
-	else if (strcmp(name, "prev") == 0  && ctx->previous)
-		label = aa_get_newest_label(ctx->previous);
-	else if (strcmp(name, "exec") == 0 && ctx->onexec)
-		label = aa_get_newest_label(ctx->onexec);
+		label = aa_get_newest_cred_label(__task_cred(task));
+	else if (strcmp(name, "prev") == 0  && task_ctx(task)->previous)
+		label = aa_get_newest_label(task_ctx(task)->previous);
+	else if (strcmp(name, "exec") == 0 && task_ctx(task)->onexec)
+		label = aa_get_newest_label(task_ctx(task)->onexec);
 	else
 		error = -EINVAL;
+	rcu_read_unlock();
 
 	if (label)
 		error = aa_getprocattr(label, value);
 
 	aa_put_label(label);
-	put_cred(cred);
 
 	return error;
 }
@@ -853,7 +847,9 @@ static int aa_sock_perm(const char *op, u32 request, struct socket *sock)
 	AA_BUG(!sock->sk);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(op, request, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 sock_perm(op, request, sock),
+			 aa_sk_perm(op, request, sock->sk));
 }
 
 static int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
@@ -864,7 +860,9 @@ static int aa_sock_msg_perm(const char *op, u32 request, struct socket *sock,
 	AA_BUG(!msg);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(op, request, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 msg_perm(op, request, sock, msg, size),
+			 aa_sk_perm(op, request, sock->sk));
 }
 
 static int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock,
@@ -874,7 +872,9 @@ static int aa_sock_opt_perm(const char *op, u32 request, struct socket *sock,
 	AA_BUG(!sock->sk);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(op, request, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 opt_perm(op, request, sock, level, optname),
+			 aa_sk_perm(op, request, sock->sk));
 }
 
 /**
@@ -889,8 +889,10 @@ static int apparmor_socket_create(int family, int type, int protocol, int kern)
 
 	label = begin_current_label_crit_section();
 	if (!(kern || unconfined(label)))
-		error = aa_af_perm(label, OP_CREATE, AA_MAY_CREATE,
-				   family, type, protocol);
+		error = af_select(family,
+				  create_perm(label, family, type, protocol),
+				  aa_af_perm(label, OP_CREATE, AA_MAY_CREATE,
+					     family, type, protocol));
 	end_current_label_crit_section(label);
 
 	return error;
@@ -941,7 +943,9 @@ static int apparmor_socket_bind(struct socket *sock,
 	AA_BUG(!address);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(OP_BIND, AA_MAY_BIND, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 bind_perm(sock, address, addrlen),
+			 aa_sk_perm(OP_BIND, AA_MAY_BIND, sock->sk));
 }
 
 /**
@@ -955,7 +959,9 @@ static int apparmor_socket_connect(struct socket *sock,
 	AA_BUG(!address);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(OP_CONNECT, AA_MAY_CONNECT, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 connect_perm(sock, address, addrlen),
+			 aa_sk_perm(OP_CONNECT, AA_MAY_CONNECT, sock->sk));
 }
 
 /**
@@ -967,7 +973,9 @@ static int apparmor_socket_listen(struct socket *sock, int backlog)
 	AA_BUG(!sock->sk);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(OP_LISTEN, AA_MAY_LISTEN, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 listen_perm(sock, backlog),
+			 aa_sk_perm(OP_LISTEN, AA_MAY_LISTEN, sock->sk));
 }
 
 /**
@@ -983,7 +991,9 @@ static int apparmor_socket_accept(struct socket *sock, struct socket *newsock)
 	AA_BUG(!newsock);
 	AA_BUG(in_interrupt());
 
-	return aa_sk_perm(OP_ACCEPT, AA_MAY_ACCEPT, sock->sk);
+	return af_select(sock->sk->sk_family,
+			 accept_perm(sock, newsock),
+			 aa_sk_perm(OP_ACCEPT, AA_MAY_ACCEPT, sock->sk));
 }
 
 /**
@@ -1208,14 +1218,14 @@ static int apparmor_unix_stream_connect(struct sock *sock, struct sock *other,
 	int error;
 
 	label = __begin_current_label_crit_section();
-	error = aa_label_sk_perm(label, OP_CONNECT,
-				 (AA_MAY_CONNECT | AA_MAY_SEND | AA_MAY_RECEIVE),
-				 sock);
+	error = aa_unix_peer_perm(label, OP_CONNECT,
+				(AA_MAY_CONNECT | AA_MAY_SEND | AA_MAY_RECEIVE),
+				  sock, other, NULL);
 	if (!UNIX_FS(other)) {
 		last_error(error,
-			aa_label_sk_perm(peer_ctx->label, OP_CONNECT,
+			aa_unix_peer_perm(peer_ctx->label, OP_CONNECT,
 				(AA_MAY_ACCEPT | AA_MAY_SEND | AA_MAY_RECEIVE),
-				other));
+				other, sock, label));
 	}
 	__end_current_label_crit_section(label);
 
@@ -1264,11 +1274,11 @@ static int apparmor_unix_may_send(struct socket *sock, struct socket *other)
 	int error;
 
 	label = __begin_current_label_crit_section();
-	error = xcheck(aa_label_sk_perm(label, OP_SENDMSG, AA_MAY_SEND,
-					sock->sk),
-		       aa_label_sk_perm(peer_ctx->label, OP_SENDMSG,
-					AA_MAY_RECEIVE,
-					other->sk));
+	error = xcheck(aa_unix_peer_perm(label, OP_SENDMSG, AA_MAY_SEND,
+					 sock->sk, other->sk, NULL),
+		       aa_unix_peer_perm(peer_ctx->label, OP_SENDMSG,
+					 AA_MAY_RECEIVE,
+					 other->sk, sock->sk, label));
 	__end_current_label_crit_section(label);
 
 	return error;
@@ -1402,6 +1412,14 @@ static const struct kernel_param_ops param_ops_aacompressionlevel = {
 	.get = param_get_aacompressionlevel
 };
 
+static int param_set_aaintbool(const char *val, const struct kernel_param *kp);
+static int param_get_aaintbool(char *buffer, const struct kernel_param *kp);
+#define param_check_aaintbool param_check_int
+static const struct kernel_param_ops param_ops_aaintbool = {
+	.set = param_set_aaintbool,
+	.get = param_get_aaintbool
+};
+
 static int param_set_aalockpolicy(const char *val, const struct kernel_param *kp);
 static int param_get_aalockpolicy(char *buffer, const struct kernel_param *kp);
 #define param_check_aalockpolicy param_check_bool
@@ -1479,7 +1497,7 @@ module_param_named(paranoid_load, aa_g_paranoid_load, aabool, S_IRUGO);
 
 /* Boot time disable flag */
 static int apparmor_enabled __lsm_ro_after_init = 1;
-module_param_named(enabled, apparmor_enabled, int, 0444);
+module_param_named(enabled, apparmor_enabled, aaintbool, 0444);
 
 static int __init apparmor_enabled_setup(char *str)
 {
@@ -1583,6 +1601,46 @@ static int param_get_aacompressionlevel(char *buffer,
 	if (apparmor_initialized && !policy_view_capable(NULL))
 		return -EPERM;
 	return param_get_int(buffer, kp);
+}
+
+/* Can only be set before AppArmor is initialized (i.e. on boot cmdline). */
+static int param_set_aaintbool(const char *val, const struct kernel_param *kp)
+{
+	struct kernel_param kp_local;
+	bool value;
+	int error;
+
+	if (apparmor_initialized)
+		return -EPERM;
+
+	/* Create local copy, with arg pointing to bool type. */
+	value = !!*((int *)kp->arg);
+	memcpy(&kp_local, kp, sizeof(kp_local));
+	kp_local.arg = &value;
+
+	error = param_set_bool(val, &kp_local);
+	if (!error)
+		*((int *)kp->arg) = *((bool *)kp_local.arg);
+	return error;
+}
+
+/*
+ * To avoid changing /sys/module/apparmor/parameters/enabled from Y/N to
+ * 1/0, this converts the "int that is actually bool" back to bool for
+ * display in the /sys filesystem, while keeping it "int" for the LSM
+ * infrastructure.
+ */
+static int param_get_aaintbool(char *buffer, const struct kernel_param *kp)
+{
+	struct kernel_param kp_local;
+	bool value;
+
+	/* Create local copy, with arg pointing to bool type. */
+	value = !!*((int *)kp->arg);
+	memcpy(&kp_local, kp, sizeof(kp_local));
+	kp_local.arg = &value;
+
+	return param_get_bool(buffer, &kp_local);
 }
 
 static int param_get_audit(char *buffer, const struct kernel_param *kp)
