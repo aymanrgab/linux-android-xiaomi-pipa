@@ -195,6 +195,20 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		state = aa_dfa_match_len(profile->policy.dfa, state,
 					 (char *) &buffer, 4);
 		aa_compute_perms(profile->policy.dfa, state, &perms);
+		/*
+		 * DFA false-positively matches any AF whose first byte is
+		 * 0x00 (shared with AF_INET etc.), landing in a non-accepting
+		 * state.  If the DFA returned no allow bits but the profile's
+		 * net.allow bitmap permits this family+type, trust the bitmap.
+		 */
+		if (!perms.allow && profile->net.allow[family] &&
+		    (profile->net.allow[family] & (1 << type))) {
+			perms.allow = ALL_PERMS_MASK;
+			perms.audit = (profile->net.audit[family] & (1 << type)) ?
+				ALL_PERMS_MASK : 0;
+			perms.quiet = (profile->net.quiet[family] & (1 << type)) ?
+				ALL_PERMS_MASK : 0;
+		}
 	} else if ((state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT)) ||
 		   profile->net.allow[family]) {
 		/* 2.x socket mediation compat */
@@ -215,11 +229,6 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		return 0;
 	}
 	aa_apply_modes_to_perms(profile, &perms);
-
-	if (!(perms.allow & request))
-		printk(KERN_WARNING "apparmor: af_perm DENY fam=%d type=%d req=0x%x allow=0x%x net=0x%x prof=%s\n",
-		       family, type, request, perms.allow,
-		       profile->net.allow[family], profile->base.name);
 
 	return aa_check_perms(profile, &perms, request, sa, audit_net_cb);
 }
