@@ -175,9 +175,6 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 
 	if (profile_unconfined(profile))
 		return 0;
-	/* Profiles with inet-only network rules must not block D-Bus AF_UNIX */
-	if (family == AF_UNIX && !PROFILE_MEDIATES_AF(profile, AF_UNIX))
-		return 0;
 	state = PROFILE_MEDIATES(profile, AA_CLASS_NET);
 	if (state) {
 		buffer[0] = cpu_to_be16(family);
@@ -185,6 +182,24 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		state = aa_dfa_match_len(profile->policy.dfa, state,
 					 (char *) &buffer, 4);
 		aa_compute_perms(profile->policy.dfa, state, &perms);
+		if (family == AF_UNIX && !(perms.allow & request)) {
+			/*
+			 * DFA denies AF_UNIX. This might be a false positive
+			 * from the shared byte prefix with AF_INET (0x00);
+			 * the DFA has no explicit AF_UNIX rule for this
+			 * profile, but the match state is non-zero due to
+			 * the shared first byte.  Re-compute perms using
+			 * net.allow (which reflects the parser's intended
+			 * rules).  If net.allow also denies, this is a
+			 * legitimate denial.
+			 */
+			perms.allow = (profile->net.allow[family] & (1 << type)) ?
+				ALL_PERMS_MASK : 0;
+			perms.audit = (profile->net.audit[family] & (1 << type)) ?
+				ALL_PERMS_MASK : 0;
+			perms.quiet = (profile->net.quiet[family] & (1 << type)) ?
+				ALL_PERMS_MASK : 0;
+		}
 	} else if ((state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT)) ||
 		   profile->net.allow[family]) {
 		/* 2.x socket mediation compat */
