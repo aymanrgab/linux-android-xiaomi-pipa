@@ -41,6 +41,9 @@
 
 #define YYTH_MAGIC	0x1B5E783D
 #define YYTH_FLAG_DIFF_ENCODE	1
+#define YYTH_FLAG_OOB_TRANS	2
+#define YYTH_FLAGS (YYTH_FLAG_DIFF_ENCODE | YYTH_FLAG_OOB_TRANS)
+#define MAX_OOB_SUPPORTED	1
 
 struct table_set_header {
 	u32 th_magic;		/* YYTH_MAGIC */
@@ -98,6 +101,7 @@ struct table_header {
 struct aa_dfa {
 	struct kref count;
 	u16 flags;
+	u32 max_oob;
 	struct table_header *tables[YYTD_ID_TSIZE];
 };
 
@@ -133,6 +137,8 @@ unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 			  const char *str);
 unsigned int aa_dfa_next(struct aa_dfa *dfa, unsigned int state,
 			 const char c);
+unsigned int aa_dfa_outofband_transition(struct aa_dfa *dfa,
+					 unsigned int state);
 unsigned int aa_dfa_match_until(struct aa_dfa *dfa, unsigned int start,
 				const char *str, const char **retpos);
 unsigned int aa_dfa_matchn_until(struct aa_dfa *dfa, unsigned int start,
@@ -188,6 +194,10 @@ static inline void aa_put_dfa(struct aa_dfa *dfa)
 
 #define MATCH_FLAG_DIFF_ENCODE 0x80000000
 #define MARK_DIFF_ENCODE 0x40000000
+#define MATCH_FLAG_OOB_TRANSITION 0x20000000
+#define MATCH_FLAGS_MASK 0xff000000
+#define MATCH_FLAGS_VALID (MATCH_FLAG_DIFF_ENCODE | MATCH_FLAG_OOB_TRANSITION)
+#define MATCH_FLAGS_INVALID (MATCH_FLAGS_MASK & ~MATCH_FLAGS_VALID)
 #define MARK_DIFF_ENCODE_VERIFIED 0x10000000
 
 #endif /* __AA_MATCH_H */

@@ -224,7 +224,8 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		buffer[1] = cpu_to_be16((u16) type);
 		state = aa_dfa_match_len(profile->policy.dfa, state,
 					 (char *) &buffer, 4);
-		aa_compute_perms(profile->policy.dfa, state, &perms);
+		state = aa_dfa_outofband_transition(profile->policy.dfa, state);
+		aa_compute_policydb_perms(&profile->policy, state, &perms);
 		aa_profile_af_perm_dfa_fallback(profile, &perms, request, family,
 					      type);
 	} else if ((state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT)) ||
@@ -234,7 +235,10 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 			buffer[0] = cpu_to_be16(family);
 			state = aa_dfa_match_len(profile->policy.dfa, state,
 						 (char *) &buffer, 2);
-			aa_compute_perms(profile->policy.dfa, state, &perms);
+			state = aa_dfa_outofband_transition(profile->policy.dfa,
+							    state);
+			aa_compute_policydb_perms(&profile->policy, state,
+						  &perms);
 			aa_profile_af_perm_dfa_fallback(profile, &perms, request,
 						      family, type);
 		} else {

@@ -344,6 +344,19 @@ void aa_compute_perms(struct aa_dfa *dfa, unsigned int state,
 //	perms->xindex = dfa_user_xindex(dfa, state);
 }
 
+void aa_compute_policydb_perms(struct aa_policydb *pdb, unsigned int state,
+			       struct aa_perms *perms)
+{
+	if (pdb->perms && state < pdb->perms_size) {
+		*perms = pdb->perms[state];
+		return;
+	}
+	if (pdb->dfa)
+		aa_compute_perms(pdb->dfa, state, perms);
+	else
+		*perms = nullperms;
+}
+
 /**
  * aa_perms_accum_raw - accumulate perms with out masking off overlapping perms
  * @accum - perms struct to accumulate into
@@ -361,6 +374,7 @@ void aa_perms_accum_raw(struct aa_perms *accum, struct aa_perms *addend)
 	accum->cond |= addend->cond & ~addend->allow & ~addend->deny;
 	accum->hide &= addend->hide & ~addend->allow;
 	accum->prompt |= addend->prompt & ~addend->allow & ~addend->deny;
+	accum->subtree |= addend->subtree & ~addend->deny;
 }
 
 /**

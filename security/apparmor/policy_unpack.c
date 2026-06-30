@@ -40,6 +40,7 @@
 #define v6	6	/* per entry policydb mediation check */
 #define v7	7	/* v2 compat networking */
 #define v8	8	/* full network masking */
+#define v9	9	/* permstable32 policy ABI */
 
 /*
  * The AppArmor interface treats data as a type byte followed by the
@@ -472,7 +473,7 @@ static int unpack_strdup(struct aa_ext *e, char **string, const char *name)
  *
  * returns dfa or ERR_PTR or NULL if no dfa
  */
-static struct aa_dfa *unpack_dfa(struct aa_ext *e)
+static struct aa_dfa *unpack_dfa_flags(struct aa_ext *e, int flags)
 {
 	char *blob = NULL;
 	size_t size;
@@ -480,24 +481,83 @@ static struct aa_dfa *unpack_dfa(struct aa_ext *e)
 
 	size = unpack_blob(e, &blob, "aadfa");
 	if (size) {
-		/*
-		 * The dfa is aligned with in the blob to 8 bytes
-		 * from the beginning of the stream.
-		 * alignment adjust needed by dfa unpack
-		 */
 		size_t sz = blob - (char *) e->start -
 			((e->pos - e->start) & 7);
 		size_t pad = ALIGN(sz, 8) - sz;
-		int flags = TO_ACCEPT1_FLAG(YYTD_DATA32) |
-			TO_ACCEPT2_FLAG(YYTD_DATA32) | DFA_FLAG_VERIFY_STATES;
-		dfa = aa_dfa_unpack(blob + pad, size - pad, flags);
 
+		dfa = aa_dfa_unpack(blob + pad, size - pad, flags);
 		if (IS_ERR(dfa))
 			return dfa;
-
 	}
 
 	return dfa;
+}
+
+static struct aa_dfa *unpack_dfa(struct aa_ext *e)
+{
+	return unpack_dfa_flags(e, TO_ACCEPT1_FLAG(YYTD_DATA32) |
+				TO_ACCEPT2_FLAG(YYTD_DATA32) |
+				DFA_FLAG_VERIFY_STATES);
+}
+
+static bool unpack_perm(struct aa_ext *e, u32 version, struct aa_perms *perm)
+{
+	if (version != 1)
+		return false;
+
+	return	unpack_u32(e, &perm->allow, NULL) &&
+		unpack_u32(e, &perm->deny, NULL) &&
+		unpack_u32(e, &perm->subtree, NULL) &&
+		unpack_u32(e, &perm->cond, NULL) &&
+		unpack_u32(e, &perm->kill, NULL) &&
+		unpack_u32(e, &perm->complain, NULL) &&
+		unpack_u32(e, &perm->prompt, NULL) &&
+		unpack_u32(e, &perm->audit, NULL) &&
+		unpack_u32(e, &perm->quiet, NULL) &&
+		unpack_u32(e, &perm->hide, NULL) &&
+		unpack_u32(e, &perm->xindex, NULL) &&
+		unpack_u32(e, &perm->tag, NULL) &&
+		unpack_u32(e, &perm->label, NULL);
+}
+
+static ssize_t unpack_perms_table(struct aa_ext *e, struct aa_perms **perms)
+{
+	void *pos = e->pos;
+	ssize_t size;
+
+	if (unpack_nameX(e, AA_STRUCT, "perms")) {
+		u32 version;
+		int i;
+
+		if (!unpack_u32(e, &version, "version"))
+			goto fail;
+		size = unpack_array(e, "perms");
+		if (size < 0)
+			goto fail;
+		*perms = kcalloc(size, sizeof(struct aa_perms), GFP_KERNEL);
+		if (!*perms)
+			goto fail;
+		for (i = 0; i < size; i++) {
+			if (!unpack_perm(e, version, &(*perms)[i]))
+				goto fail_free;
+		}
+		if (!unpack_nameX(e, AA_ARRAYEND, NULL))
+			goto fail_free;
+		if (!unpack_nameX(e, AA_STRUCTEND, NULL))
+			goto fail_free;
+	} else {
+		*perms = NULL;
+		size = 0;
+	}
+
+	return size;
+
+fail_free:
+	kfree(*perms);
+	*perms = NULL;
+fail:
+	e->pos = pos;
+	return -EPROTO;
 }
 
 /**
@@ -911,9 +971,26 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 	}
 
 	if (unpack_nameX(e, AA_STRUCT, "policydb")) {
-		/* generic policy dfa - optional and may be NULL */
+		ssize_t perms_size;
+		int dfa_flags;
+
 		info = "failed to unpack policydb";
-		profile->policy.dfa = unpack_dfa(e);
+		perms_size = unpack_perms_table(e, &profile->policy.perms);
+		if (perms_size < 0) {
+			error = perms_size;
+			goto fail;
+		}
+		profile->policy.perms_size = perms_size;
+
+		if (profile->policy.perms)
+			dfa_flags = TO_ACCEPT1_FLAG(YYTD_DATA32) |
+				    DFA_FLAG_VERIFY_STATES;
+		else
+			dfa_flags = TO_ACCEPT1_FLAG(YYTD_DATA32) |
+				    TO_ACCEPT2_FLAG(YYTD_DATA32) |
+				    DFA_FLAG_VERIFY_STATES;
+
+		profile->policy.dfa = unpack_dfa_flags(e, dfa_flags);
 		if (IS_ERR(profile->policy.dfa)) {
 			error = PTR_ERR(profile->policy.dfa);
 			profile->policy.dfa = NULL;
@@ -923,7 +1000,6 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 			goto fail;
 		}
 		if (!unpack_u32(e, &profile->policy.start[0], "start"))
-			/* default start state */
 			profile->policy.start[0] = DFA_START;
 
 		if (profile->policy.start[0] >=
@@ -932,7 +1008,6 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 			goto fail;
 		}
 
-		/* setup class index */
 		for (i = AA_CLASS_FILE; i <= AA_CLASS_LAST; i++) {
 			profile->policy.start[i] =
 				aa_dfa_next(profile->policy.dfa,
@@ -1061,7 +1136,7 @@ static int verify_header(struct aa_ext *e, int required, const char **ns)
 	 * if not specified use previous version
 	 * Mask off everything that is not kernel abi version
 	 */
-	if (VERSION_LT(e->version, v5) || VERSION_GT(e->version, v8)) {
+	if (VERSION_LT(e->version, v5) || VERSION_GT(e->version, v9)) {
 		audit_iface(NULL, NULL, NULL, "unsupported interface version",
 			    e, error);
 		return error;
@@ -1107,6 +1182,23 @@ static bool verify_dfa_xindex(struct aa_dfa *dfa, int table_size)
 	return 1;
 }
 
+static bool verify_policydb_perms(struct aa_policydb *pdb)
+{
+	u32 i;
+
+	if (!pdb->perms)
+		return true;
+
+	for (i = 0; i < pdb->perms_size; i++) {
+		if (pdb->perms[i].complain & pdb->perms[i].prompt)
+			return false;
+		if (pdb->perms[i].hide & pdb->perms[i].allow)
+			return false;
+	}
+
+	return true;
+}
+
 /**
  * verify_profile - Do post unpack analysis to verify profile consistency
  * @profile: profile to verify (NOT NULL)
@@ -1119,6 +1211,12 @@ static int verify_profile(struct aa_profile *profile)
 	    !verify_dfa_xindex(profile->file.dfa,
 			       profile->file.trans.size)) {
 		audit_iface(profile, NULL, NULL, "Invalid named transition",
+			    NULL, -EPROTO);
+		return -EPROTO;
+	}
+
+	if (!verify_policydb_perms(&profile->policy)) {
+		audit_iface(profile, NULL, NULL, "Invalid policydb perms",
 			    NULL, -EPROTO);
 		return -EPROTO;
 	}

@@ -37,6 +37,7 @@
 #include "include/ipc.h"
 #include "include/label.h"
 #include "include/lib.h"
+#include "include/match.h"
 #include "include/policy.h"
 #include "include/policy_ns.h"
 #include "include/resource.h"
@@ -2388,17 +2389,25 @@ static struct aa_sfs_entry aa_sfs_entry_versions[] = {
 	AA_SFS_FILE_BOOLEAN("v6",	1),
 	AA_SFS_FILE_BOOLEAN("v7",	1),
 	AA_SFS_FILE_BOOLEAN("v8",	1),
+	AA_SFS_FILE_BOOLEAN("v9",	1),
 	{ }
 };
+
+#define AA_PERMSTABLE32_STR \
+	"allow deny subtree cond kill complain prompt audit quiet hide xindex tag label"
 
 static struct aa_sfs_entry aa_sfs_entry_policy[] = {
 	AA_SFS_DIR("versions",			aa_sfs_entry_versions),
 	AA_SFS_FILE_BOOLEAN("set_load",		1),
+	AA_SFS_FILE_U64("outofband",		MAX_OOB_SUPPORTED),
+	AA_SFS_FILE_U64("permstable32_version", 1),
+	AA_SFS_FILE_STRING("permstable32", AA_PERMSTABLE32_STR),
 	{ }
 };
 
 static struct aa_sfs_entry aa_sfs_entry_mount[] = {
 	AA_SFS_FILE_STRING("mask", "mount umount pivot_root"),
+	AA_SFS_FILE_STRING("move_mount", "detached"),
 	{ }
 };
 
@@ -2409,7 +2418,7 @@ static struct aa_sfs_entry aa_sfs_entry_ns[] = {
 };
 
 static struct aa_sfs_entry aa_sfs_entry_query_label[] = {
-	AA_SFS_FILE_STRING("perms", "allow deny audit quiet"),
+	AA_SFS_FILE_STRING("perms", "allow deny subtree audit quiet hide xindex tag label"),
 	AA_SFS_FILE_BOOLEAN("data",		1),
 	AA_SFS_FILE_BOOLEAN("multi_transaction",	1),
 	{ }

@@ -208,7 +208,7 @@ static int verify_dfa(struct aa_dfa *dfa)
 	if (state_count == 0)
 		goto out;
 	for (i = 0; i < state_count; i++) {
-		if (!(BASE_TABLE(dfa)[i] & MATCH_FLAG_DIFF_ENCODE) &&
+		if (!(BASE_TABLE(dfa)[i] & MATCH_FLAGS_VALID) &&
 		    (DEFAULT_TABLE(dfa)[i] >= state_count))
 			goto out;
 		if (base_idx(BASE_TABLE(dfa)[i]) + 255 >= trans_count) {
@@ -329,8 +329,10 @@ struct aa_dfa *aa_dfa_unpack(void *blob, size_t size, int flags)
 		goto fail;
 
 	dfa->flags = ntohs(*(__be16 *) (data + 12));
-	if (dfa->flags != 0 && dfa->flags != YYTH_FLAG_DIFF_ENCODE)
+	if (dfa->flags & ~YYTH_FLAGS)
 		goto fail;
+
+	dfa->max_oob = 1;
 
 	data += hsize;
 	size -= hsize;
@@ -451,6 +453,31 @@ unsigned int aa_dfa_match_len(struct aa_dfa *dfa, unsigned int start,
 			str++;
 		}
 	}
+
+	return state;
+}
+
+/**
+ * aa_dfa_outofband_transition - follow an out-of-band DFA transition
+ * @dfa: policy dfa (NOT NULL)
+ * @state: state to transition from
+ *
+ * Returns: new state after OOB transition, or 0 if none
+ */
+unsigned int aa_dfa_outofband_transition(struct aa_dfa *dfa,
+					 unsigned int state)
+{
+	u16 *def = DEFAULT_TABLE(dfa);
+	u32 *base = BASE_TABLE(dfa);
+	u16 *next = NEXT_TABLE(dfa);
+	u16 *check = CHECK_TABLE(dfa);
+	u32 b = base[state];
+
+	if (!(b & MATCH_FLAG_OOB_TRANSITION))
+		return 0;
+
+	/* No equivalence class remapping for out-of-band transitions */
+	match_char(state, def, base, next, check, (u8) -1);
 
 	return state;
 }

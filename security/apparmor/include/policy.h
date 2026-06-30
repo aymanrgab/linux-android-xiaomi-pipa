@@ -71,12 +71,16 @@ enum profile_mode {
 
 
 /* struct aa_policydb - match engine for a policy
- * dfa: dfa pattern match
- * start: set of start states for the different classes of data
+ * @dfa: dfa pattern match
+ * @perms: optional permstable32 table (accept entries are indices)
+ * @perms_size: number of entries in @perms
+ * @start: set of start states for the different classes of data
  */
 struct aa_policydb {
 	/* Generic policy DFA specific rule types will be subsections of it */
 	struct aa_dfa *dfa;
+	struct aa_perms *perms;
+	u32 perms_size;
 	unsigned int start[AA_CLASS_LAST + 1];
 
 };

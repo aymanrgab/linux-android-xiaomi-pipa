@@ -258,6 +258,7 @@ void aa_free_profile(struct aa_profile *profile)
 	for (i=0; i < profile->secmark_count; i++)
 		kzfree(profile->secmark[i].label);
 	kzfree(profile->secmark);
+	kzfree(profile->policy.perms);
 	kzfree(profile->dirname);
 	aa_put_dfa(profile->xmatch);
 	aa_put_dfa(profile->policy.dfa);

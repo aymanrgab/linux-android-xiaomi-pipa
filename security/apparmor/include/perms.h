@@ -17,6 +17,8 @@
 #include <linux/fs.h>
 #include "label.h"
 
+struct aa_policydb;
+
 #define AA_MAY_EXEC		MAY_EXEC
 #define AA_MAY_WRITE		MAY_WRITE
 #define AA_MAY_READ		MAY_READ
@@ -69,23 +71,24 @@ extern const char *aa_file_perm_names[];
 
 struct aa_perms {
 	u32 allow;
-	u32 audit;	/* set only when allow is set */
-
 	u32 deny;	/* explicit deny, or conflict if allow also set */
-	u32 quiet;	/* set only when ~allow | deny */
-	u32 kill;	/* set only when ~allow | deny */
-	u32 stop;	/* set only when ~allow | deny */
 
-	u32 complain;	/* accumulates only used when ~allow & ~deny */
+	u32 subtree;	/* allow perm on full subtree only when allow is set */
 	u32 cond;	/* set only when ~allow and ~deny */
 
-	u32 hide;	/* set only when  ~allow | deny */
+	u32 kill;	/* set only when ~allow | deny */
+	u32 complain;	/* accumulates only used when ~allow & ~deny */
 	u32 prompt;	/* accumulates only used when ~allow & ~deny */
 
-	/* Reserved:
-	 * u32 subtree;	/ * set only when allow is set * /
-	 */
-	u16 xindex;
+	u32 audit;	/* set only when allow is set */
+	u32 quiet;	/* set only when ~allow | deny */
+	u32 hide;	/* set only when  ~allow | deny */
+
+	u32 xindex;
+	u32 tag;	/* tag string index, if present */
+	u32 label;	/* label string index, if present */
+
+	u32 stop;	/* set only when ~allow | deny */
 };
 
 #define ALL_PERMS_MASK 0xffffffff
@@ -147,6 +150,8 @@ void aa_apply_modes_to_perms(struct aa_profile *profile,
 			     struct aa_perms *perms);
 void aa_compute_perms(struct aa_dfa *dfa, unsigned int state,
 		      struct aa_perms *perms);
+void aa_compute_policydb_perms(struct aa_policydb *pdb, unsigned int state,
+			       struct aa_perms *perms);
 void aa_perms_accum(struct aa_perms *accum, struct aa_perms *addend);
 void aa_perms_accum_raw(struct aa_perms *accum, struct aa_perms *addend);
 void aa_profile_match_label(struct aa_profile *profile, struct aa_label *label,
