@@ -162,6 +162,36 @@ void audit_net_cb(struct audit_buffer *ab, void *va)
 	}
 }
 
+static void aa_profile_af_perm_from_bitmap(struct aa_profile *profile,
+					   struct aa_perms *perms, u16 family,
+					   int type)
+{
+	perms->deny = 0;
+	perms->allow = ALL_PERMS_MASK;
+	perms->audit = (profile->net.audit[family] & (1 << type)) ?
+		ALL_PERMS_MASK : 0;
+	perms->quiet = (profile->net.quiet[family] & (1 << type)) ?
+		ALL_PERMS_MASK : 0;
+}
+
+/*
+ * DFA network matching false-positives when AF high byte is 0x00 (AF_INET,
+ * AF_NETLINK, ...).  The match can land in a state with partial permissions
+ * that omit AA_MAY_CREATE even though net.allow permits the socket type.
+ * When the bitmap allows family+type, trust it over an incomplete DFA result.
+ */
+static void aa_profile_af_perm_dfa_fallback(struct aa_profile *profile,
+					    struct aa_perms *perms, u32 request,
+					    u16 family, int type)
+{
+	if (!(profile->net.allow[family] & (1 << type)))
+		return;
+	if ((perms->allow & request) && !(perms->deny & request))
+		return;
+
+	aa_profile_af_perm_from_bitmap(profile, perms, family, type);
+}
+
 /* Generic af perm */
 int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		       u32 request, u16 family, int type)
@@ -195,20 +225,8 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		state = aa_dfa_match_len(profile->policy.dfa, state,
 					 (char *) &buffer, 4);
 		aa_compute_perms(profile->policy.dfa, state, &perms);
-		/*
-		 * DFA false-positively matches any AF whose first byte is
-		 * 0x00 (shared with AF_INET etc.), landing in a non-accepting
-		 * state.  If the DFA returned no allow bits but the profile's
-		 * net.allow bitmap permits this family+type, trust the bitmap.
-		 */
-		if (!perms.allow && profile->net.allow[family] &&
-		    (profile->net.allow[family] & (1 << type))) {
-			perms.allow = ALL_PERMS_MASK;
-			perms.audit = (profile->net.audit[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-			perms.quiet = (profile->net.quiet[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-		}
+		aa_profile_af_perm_dfa_fallback(profile, &perms, request, family,
+					      type);
 	} else if ((state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT)) ||
 		   profile->net.allow[family]) {
 		/* 2.x socket mediation compat */
@@ -217,13 +235,12 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 			state = aa_dfa_match_len(profile->policy.dfa, state,
 						 (char *) &buffer, 2);
 			aa_compute_perms(profile->policy.dfa, state, &perms);
+			aa_profile_af_perm_dfa_fallback(profile, &perms, request,
+						      family, type);
 		} else {
-			perms.allow = (profile->net.allow[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-			perms.audit = (profile->net.audit[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-			perms.quiet = (profile->net.quiet[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
+			if (profile->net.allow[family] & (1 << type))
+				aa_profile_af_perm_from_bitmap(profile, &perms,
+							       family, type);
 		}
 	} else {
 		return 0;
