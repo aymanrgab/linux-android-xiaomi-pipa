@@ -175,6 +175,19 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 
 	if (profile_unconfined(profile))
 		return 0;
+	/*
+	 * DFA false-positively matches AF_UNIX when other families share
+	 * byte 0x00 (AF_INET, AF_INET6, AF_NETLINK), landing in a
+	 * non-accepting state that always denies. Short-circuit here:
+	 * if the profile has no explicit AF_UNIX rules at all (net.allow
+	 * is zero) or permits this socket type directly, allow and skip
+	 * the DFA. Otherwise, trust the DFA for denial/remediation.
+	 */
+	if (family == AF_UNIX) {
+		u16 __allow = profile->net.allow[family];
+		if (!__allow || (__allow & (1 << type)))
+			return 0;
+	}
 	state = PROFILE_MEDIATES(profile, AA_CLASS_NET);
 	if (state) {
 		buffer[0] = cpu_to_be16(family);
@@ -182,24 +195,6 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		state = aa_dfa_match_len(profile->policy.dfa, state,
 					 (char *) &buffer, 4);
 		aa_compute_perms(profile->policy.dfa, state, &perms);
-		if (family == AF_UNIX && !(perms.allow & request)) {
-			/*
-			 * DFA denies AF_UNIX. This might be a false positive
-			 * from the shared byte prefix with AF_INET (0x00);
-			 * the DFA has no explicit AF_UNIX rule for this
-			 * profile, but the match state is non-zero due to
-			 * the shared first byte.  Re-compute perms using
-			 * net.allow (which reflects the parser's intended
-			 * rules).  If net.allow also denies, this is a
-			 * legitimate denial.
-			 */
-			perms.allow = (profile->net.allow[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-			perms.audit = (profile->net.audit[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-			perms.quiet = (profile->net.quiet[family] & (1 << type)) ?
-				ALL_PERMS_MASK : 0;
-		}
 	} else if ((state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT)) ||
 		   profile->net.allow[family]) {
 		/* 2.x socket mediation compat */
