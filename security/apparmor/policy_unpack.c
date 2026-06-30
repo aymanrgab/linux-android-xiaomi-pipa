@@ -880,10 +880,13 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 			}
 			if (size && !unpack_nameX(e, AA_ARRAYEND, NULL))
 				goto fail;
-			if (VERSION_LT(e->version, v7)) {
-				profile->net.allow[AF_UNIX] = 0xffff;
-				profile->net.allow[AF_NETLINK] = 0xffff;
-			}
+			/* Removed: pre-v7 compat override that force-set
+			 * AF_UNIX and AF_NETLINK to 0xffff. This poisoned
+			 * net.allow for profiles with only inet rules,
+			 * making the AF_UNIX early-return guard in
+			 * aa_profile_af_perm unreliable. Profiles that
+			 * need these AFs must declare them explicitly.
+			 */
 		}
 	}
 

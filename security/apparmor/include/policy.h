@@ -238,18 +238,21 @@ static inline unsigned int PROFILE_MEDIATES_AF(struct aa_profile *profile,
 			return profile->net.allow[AF] ? 1 : 0;
 	}
 
-	state = aa_dfa_match_af_explicit(profile->policy.dfa, state, AF);
 	/*
-	 * aa_dfa_match_af_explicit can return a false positive when AF shares
-	 * its first byte with another mediated family (e.g. AF_UNIX=0x0001
-	 * and AF_INET=0x0002 share high byte 0x00). Double-check against
-	 * the net.allow bitmap: if the bitmap says this AF isn't allowed at
-	 * all, the DFA hit was a shared-prefix artifact, not a real rule.
+	 * aa_dfa_match_af_explicit is unreliable when @AF shares its first
+	 * byte with another mediated family (eg AF_UNIX=0x0001 and
+	 * AF_INET=0x0002 both have high byte 0x00).  DFA default transitions
+	 * are per-state and non-zero, so once the shared byte pulls us onto
+	 * an explicit path, the 0xFFFF comparison always diverges.
+	 *
+	 * Instead, always cross-check against profile->net.allow[AF].
+	 * Profiles without rules for this AF have a zero bitmap entry
+	 * (modulo pre-v7 compat code, see policy_unpack.c).
 	 */
-	if (state && profile->net.allow[AF])
+	if (profile->net.allow[AF])
 		return state;
 
-	return profile->net.allow[AF] ? 1 : 0;
+	return 0;
 }
 
 /**
