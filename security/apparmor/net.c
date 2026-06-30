@@ -195,6 +195,10 @@ int aa_profile_af_perm(struct aa_profile *profile, struct common_audit_data *sa,
 		state = aa_dfa_match_len(profile->policy.dfa, state,
 					 (char *) &buffer, 4);
 		aa_compute_perms(profile->policy.dfa, state, &perms);
+		if (family != AF_UNIX && !(perms.allow & request))
+			printk(KERN_WARNING "apparmor: af_perm DENY family=%d type=%d request=0x%x allow=0x%x state=%u profile=%s\n",
+			       family, type, request, perms.allow, state,
+			       profile->base.name);
 	} else if ((state = PROFILE_MEDIATES(profile, AA_CLASS_NET_COMPAT)) ||
 		   profile->net.allow[family]) {
 		/* 2.x socket mediation compat */
