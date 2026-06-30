@@ -474,7 +474,7 @@ unsigned int aa_dfa_outofband_transition(struct aa_dfa *dfa,
 	u32 b = base[state];
 
 	if (!(b & MATCH_FLAG_OOB_TRANSITION))
-		return 0;
+		return state;
 
 	/* No equivalence class remapping for out-of-band transitions */
 	match_char(state, def, base, next, check, (u8) -1);
