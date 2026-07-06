@@ -10,7 +10,8 @@ KERNEL_BASE_VERSION = 4.19.325
 
 # The kernel cmdline to use
 # Match the Android device tree for pipa, then append Droidian-specific bits.
-KERNEL_BOOTIMAGE_CMDLINE = quiet splash msm_drm.vram=64M \
+KERNEL_BOOTIMAGE_CMDLINE = console=ttyMSM0,115200 quiet splash msm_drm.vram=64M \
+                            fbcon=map:1 plymouth.ignore-serial-consoles \
                             androidboot.hardware=qcom \
                             androidboot.console=ttyMSM0 \
                             androidboot.memcg=1 \
