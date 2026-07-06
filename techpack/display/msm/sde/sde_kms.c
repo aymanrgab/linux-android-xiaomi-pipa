@@ -110,6 +110,8 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms);
 static int _sde_kms_mmu_init(struct sde_kms *sde_kms);
 static int _sde_kms_register_events(struct msm_kms *kms,
 		struct drm_mode_object *obj, u32 event, bool en);
+static void _sde_kms_null_commit(struct drm_device *dev,
+		struct drm_encoder *enc);
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
