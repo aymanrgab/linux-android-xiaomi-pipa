@@ -3022,11 +3022,25 @@ static struct fb_ops drm_fbdev_fb_ops = {
 	.fb_release	= drm_fbdev_fb_release,
 	.fb_destroy	= drm_fbdev_fb_destroy,
 	.fb_mmap	= drm_fbdev_fb_mmap,
+#if IS_ENABLED(CONFIG_FB_SYS_FOPS)
 	.fb_read	= drm_fb_helper_sys_read,
 	.fb_write	= drm_fb_helper_sys_write,
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_FILLRECT)
 	.fb_fillrect	= drm_fb_helper_sys_fillrect,
+#else
+	.fb_fillrect	= drm_fb_helper_cfb_fillrect,
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_COPYAREA)
 	.fb_copyarea	= drm_fb_helper_sys_copyarea,
+#else
+	.fb_copyarea	= drm_fb_helper_cfb_copyarea,
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_IMAGEBLIT)
 	.fb_imageblit	= drm_fb_helper_sys_imageblit,
+#else
+	.fb_imageblit	= drm_fb_helper_cfb_imageblit,
+#endif
 };
 
 static struct fb_deferred_io drm_fbdev_defio = {
