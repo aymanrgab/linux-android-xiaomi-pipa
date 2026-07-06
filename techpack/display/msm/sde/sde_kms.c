@@ -2735,6 +2735,17 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 			SDE_ERROR("Failed: updating plane status rc=%d\n", rc);
 			return rc;
 		}
+
+		/* Release cont-splash resources immediately so subsequent
+		 * atomic modesets (fbdev, Plymouth) can succeed without
+		 * being blocked by _sde_plane_validate_shared_crtc().
+		 * The bootloader-configured display state is fully captured
+		 * by the DRM state set up above; cont-splash is no longer
+		 * needed.
+		 */
+		sde_encoder_update_caps_for_cont_splash(encoder,
+				splash_display, false);
+		_sde_kms_free_splash_region(sde_kms, splash_display);
 	}
 
 	return rc;
