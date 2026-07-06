@@ -4849,14 +4849,32 @@ static int _sde_crtc_check_zpos(struct drm_crtc_state *state,
 		return rc;
 
 	if (!sde_is_custom_client()) {
-		int stage_old = pstates[0].stage;
-
+		/*
+		 * Non-Android compositors (phosh/Lomiri/wlroots/Weston)
+		 * frequently commit multiple planes that share the same
+		 * requested zpos (often all default to 0 because they do
+		 * not set an explicit DRM zpos on every plane). The old
+		 * logic only collapsed *gaps* between distinct zpos values
+		 * and left planes with identical zpos on the same blend
+		 * stage, tripping the "> 2 planes @ stage 0" check below
+		 * and failing every atomic commit (blank/garbled UI).
+		 *
+		 * pstates are already sorted by zpos (see sort() above),
+		 * so assign each plane its own sequential blend stage. The
+		 * SDE mixer supports SDE_STAGE_0..SDE_STAGE_10 (11 stages),
+		 * which comfortably covers a typical Wayland scene. Ties on
+		 * the input zpos keep their sorted order, preserving the
+		 * compositor's intended stacking.
+		 */
 		z_pos = 0;
 		for (i = 0; i < cnt; i++) {
-			if (stage_old != pstates[i].stage)
-				++z_pos;
-			stage_old = pstates[i].stage;
+			if (z_pos >= SDE_STAGE_MAX - SDE_STAGE_0) {
+				SDE_ERROR("too many planes (%d) for blend stages\n",
+						cnt);
+				return -EINVAL;
+			}
 			pstates[i].stage = z_pos;
+			++z_pos;
 		}
 	}
 
