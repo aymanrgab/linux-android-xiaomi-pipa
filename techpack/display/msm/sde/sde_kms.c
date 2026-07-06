@@ -1092,9 +1092,33 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 		return;
 
 	if (splash_display->cont_splash_enabled) {
-		sde_encoder_update_caps_for_cont_splash(splash_display->encoder,
+		struct drm_encoder *enc = splash_display->encoder;
+
+		sde_encoder_update_caps_for_cont_splash(enc,
 				splash_display, false);
 		_sde_kms_free_splash_region(sde_kms, splash_display);
+
+		/* Also complete the DSI-level cont-splash handoff.
+		 * dsi_display_splash_res_cleanup() clears
+		 * display->is_cont_splash_enabled so subsequent modesets
+		 * perform full panel initialization instead of skipping
+		 * soft reset and panel prepare (which are skipped when
+		 * the flag is set).
+		 */
+		{
+			int di;
+
+			for (di = 0; di < sde_kms->dsi_display_count; ++di) {
+				struct dsi_display *dsi =
+					(struct dsi_display *)
+					sde_kms->dsi_displays[di];
+				if (dsi && dsi->bridge &&
+					dsi->bridge->base.encoder == enc) {
+					dsi_display_splash_res_cleanup(dsi);
+					break;
+				}
+			}
+		}
 	}
 
 	/* remove the votes if all displays are done with splash */
