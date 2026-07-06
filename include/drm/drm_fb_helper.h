@@ -299,17 +299,25 @@ void drm_fb_helper_deferred_io(struct fb_info *info,
 			       struct list_head *pagelist);
 int drm_fb_helper_defio_init(struct drm_fb_helper *fb_helper);
 
+#if IS_ENABLED(CONFIG_FB_SYS_FOPS)
 ssize_t drm_fb_helper_sys_read(struct fb_info *info, char __user *buf,
 			       size_t count, loff_t *ppos);
 ssize_t drm_fb_helper_sys_write(struct fb_info *info, const char __user *buf,
 				size_t count, loff_t *ppos);
+#endif
 
+#if IS_ENABLED(CONFIG_FB_SYS_FILLRECT)
 void drm_fb_helper_sys_fillrect(struct fb_info *info,
 				const struct fb_fillrect *rect);
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_COPYAREA)
 void drm_fb_helper_sys_copyarea(struct fb_info *info,
 				const struct fb_copyarea *area);
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_IMAGEBLIT)
 void drm_fb_helper_sys_imageblit(struct fb_info *info,
 				 const struct fb_image *image);
+#endif
 
 void drm_fb_helper_cfb_fillrect(struct fb_info *info,
 				const struct fb_fillrect *rect);
