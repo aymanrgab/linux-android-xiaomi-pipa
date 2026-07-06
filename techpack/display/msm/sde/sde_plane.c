@@ -2550,20 +2550,11 @@ static int _sde_plane_validate_shared_crtc(struct sde_plane *psde,
 
 				if (splash_display->pipes[j].sspp ==
 						psde->pipe) {
-					/* Block kernel fbdev init; allow
-					 * userspace DRM clients (Plymouth)
-					 * after master handoff.
-					 */
-					if (!current || !current->mm) {
-						SDE_ERROR_PLANE(psde,
-						"pipe:%d used in cont-splash on crtc:%d\n",
-						psde->pipe,
-						splash_display->encoder->crtc->base.id);
-						return -EINVAL;
-					}
-					pr_warn("plane%d pipe:%d cont-splash handoff for userspace on crtc:%d\n",
-						psde->base.base.id, psde->pipe,
-						splash_display->encoder->crtc->base.id);
+					SDE_ERROR_PLANE(psde,
+					"pipe:%d used in cont-splash on crtc:%d\n",
+					psde->pipe,
+					splash_display->encoder->crtc->base.id);
+					return -EINVAL;
 				}
 			}
 		}

@@ -110,9 +110,6 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms);
 static int _sde_kms_mmu_init(struct sde_kms *sde_kms);
 static int _sde_kms_register_events(struct msm_kms *kms,
 		struct drm_mode_object *obj, u32 event, bool en);
-static void _sde_kms_null_commit(struct drm_device *dev,
-		struct drm_encoder *enc);
-static bool sde_kms_userspace_splash_handoff_done;
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
@@ -2768,47 +2765,6 @@ static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc)
 
 }
 
-static int sde_kms_cont_splash_handoff_on_master(struct msm_kms *kms)
-{
-	struct sde_kms *sde_kms;
-	struct sde_splash_display *splash_display;
-	int i;
-
-	if (!kms || sde_kms_userspace_splash_handoff_done)
-		return 0;
-
-	/* Only hand off when userspace acquires DRM master (Plymouth). */
-	if (!current || !current->mm)
-		return 0;
-
-	sde_kms = to_sde_kms(kms);
-	if (!sde_kms->splash_data.num_splash_displays)
-		return 0;
-
-	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY, sde_kms->splash_data.num_splash_displays);
-
-	/*
-	 * Plymouth (drm.so) acquires DRM master and modesets via legacy
-	 * drmModeSetCrtc. Hand off cont-splash on first master acquisition
-	 * from userspace — not during early boot fbdev init, which leaves
-	 * this dual-DSI panel corrupted.
-	 */
-	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
-		splash_display = &sde_kms->splash_data.splash_display[i];
-
-		if (splash_display->cont_splash_enabled &&
-				splash_display->encoder &&
-				splash_display->encoder->crtc)
-			_sde_kms_null_commit(sde_kms->dev,
-					splash_display->encoder);
-	}
-
-	sde_kms_userspace_splash_handoff_done = true;
-	DRM_INFO("cont_splash handoff for userspace DRM master\n");
-
-	return 0;
-}
-
 static int sde_kms_get_mixer_count(const struct msm_kms *kms,
 		const struct drm_display_mode *mode,
 		const struct msm_resource_caps_info *res, u32 *num_lm)
@@ -3180,7 +3136,6 @@ static const struct msm_kms_funcs kms_funcs = {
 	.get_address_space_device = _sde_kms_get_address_space_device,
 	.postopen = _sde_kms_post_open,
 	.check_for_splash = sde_kms_check_for_splash,
-	.cont_splash_handoff_on_master = sde_kms_cont_splash_handoff_on_master,
 	.get_mixer_count = sde_kms_get_mixer_count,
 };
 
