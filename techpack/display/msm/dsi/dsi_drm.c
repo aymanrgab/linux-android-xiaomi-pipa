@@ -176,6 +176,45 @@ static int dsi_bridge_attach(struct drm_bridge *bridge)
 
 }
 
+/*
+ * _dsi_bridge_fpc_send_pps - (re)send DSC PPS on the FPC early-return path.
+ *
+ * The FPC/FOD fast unblank path in dsi_bridge_pre_enable() returns before
+ * dsi_display_enable() runs, which is where the DSC Picture Parameter Set is
+ * normally programmed. On DSC panels the panel must receive a PPS that matches
+ * the current mode or it decodes garbage (multicolored vertical-line noise).
+ * This helper mirrors the guarded PPS block in dsi_display_enable() so the
+ * compression parameters are refreshed even when the full enable is skipped.
+ */
+static void _dsi_bridge_fpc_send_pps(struct dsi_display *display)
+{
+	struct dsi_display_mode *mode;
+	int rc;
+
+	if (!display || !display->panel || !display->panel->cur_mode)
+		return;
+
+	mode = display->panel->cur_mode;
+	if (!mode->priv_info || !mode->priv_info->dsc_enabled)
+		return;
+
+	/* Skip if this modeset is only an fps switch (matches enable path). */
+	if (mode->dsi_mode_flags & DSI_MODE_FLAG_DMS_FPS)
+		return;
+
+	/*
+	 * dsi_panel_update_pps() rebuilds pic_width for dual-DSI internally
+	 * (it halves pic_width when panel-count == 2). The enable path scales
+	 * pic_width by ctrl_count first; replicate that so the PPS width is
+	 * identical to a normal enable.
+	 */
+	mode->priv_info->dsc.pic_width *= display->ctrl_count;
+	rc = dsi_panel_update_pps(display->panel);
+	if (rc)
+		DSI_ERR("[%s] fpc pps update failed, rc=%d\n",
+			display->name, rc);
+}
+
 static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 {
 	int rc = 0;
@@ -224,6 +263,15 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 			rc = dsi_display_splash_res_cleanup(c_bridge->display);
 			DSI_INFO("dsi_display_splash_res_cleanup returned %d, is_cont_splash_enabled=%d\n",
 				rc, c_bridge->display->is_cont_splash_enabled);
+			/*
+			 * dsi_display_enable() is skipped on this early-return, so
+			 * the DSC Picture Parameter Set is never sent for the new
+			 * modeset. On a DSC panel that leaves the panel decoding a
+			 * stream with stale/incorrect compression params, showing
+			 * dense multicolored vertical-line noise. Send the PPS here,
+			 * mirroring the guarded block in dsi_display_enable().
+			 */
+			_dsi_bridge_fpc_send_pps(c_bridge->display);
 			return;
 		} else if (c_bridge->display->panel->panel_mode == DSI_OP_CMD_MODE &&
 		    c_bridge->dsi_mode.dsi_mode_flags != DSI_MODE_FLAG_DMS) {
@@ -231,6 +279,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 			rc = dsi_display_splash_res_cleanup(c_bridge->display);
 			DSI_INFO("dsi_display_splash_res_cleanup returned %d, is_cont_splash_enabled=%d\n",
 				rc, c_bridge->display->is_cont_splash_enabled);
+			_dsi_bridge_fpc_send_pps(c_bridge->display);
 			return;
 		}
 	}
