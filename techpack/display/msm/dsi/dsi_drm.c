@@ -258,7 +258,10 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
 		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
 
-		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
+		if (c_bridge->display->post_splash_handoff_pending) {
+			DSI_INFO("post-splash handoff: forcing full display enable\n");
+			c_bridge->display->post_splash_handoff_pending = false;
+		} else if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
 			DSI_INFO("skip set display config for video panel in fpc\n");
 			rc = dsi_display_splash_res_cleanup(c_bridge->display);
 			DSI_INFO("dsi_display_splash_res_cleanup returned %d, is_cont_splash_enabled=%d\n",

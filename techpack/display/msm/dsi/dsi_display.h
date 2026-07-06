@@ -144,6 +144,7 @@ struct dsi_display_ext_bridge {
  * @list:             List pointer.
  * @is_active:        Is display active.
  * @is_cont_splash_enabled:  Is continuous splash enabled
+ * @post_splash_handoff_pending: Next enable must skip FPC fast path
  * @sw_te_using_wd:   Is software te enabled
  * @display_lock:     Mutex for dsi_display interface.
  * @disp_te_gpio:     GPIO for panel TE interrupt.
@@ -199,6 +200,7 @@ struct dsi_display {
 	const char *display_type;
 	struct list_head list;
 	bool is_cont_splash_enabled;
+	bool post_splash_handoff_pending;
 	bool is_prim_display;
 	bool sw_te_using_wd;
 	struct mutex display_lock;

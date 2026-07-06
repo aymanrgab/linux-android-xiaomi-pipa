@@ -5010,6 +5010,7 @@ int dsi_display_splash_res_cleanup(struct  dsi_display *display)
 	pm_runtime_put_sync(display->drm_dev->dev);
 
 	display->is_cont_splash_enabled = false;
+	display->post_splash_handoff_pending = true;
 	/* Update splash status for clock manager */
 	dsi_display_clk_mngr_update_splash_status(display->clk_mngr,
 				display->is_cont_splash_enabled);
