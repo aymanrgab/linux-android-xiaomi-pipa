@@ -1113,15 +1113,7 @@ int drm_fb_helper_defio_init(struct drm_fb_helper *fb_helper)
 }
 EXPORT_SYMBOL(drm_fb_helper_defio_init);
 
-/**
- * drm_fb_helper_sys_read - wrapper around fb_sys_read
- * @info: fb_info struct pointer
- * @buf: userspace buffer to read from framebuffer memory
- * @count: number of bytes to read from framebuffer memory
- * @ppos: read offset within framebuffer memory
- *
- * A wrapper around fb_sys_read implemented by fbdev core
- */
+#if IS_ENABLED(CONFIG_FB_SYS_FOPS)
 ssize_t drm_fb_helper_sys_read(struct fb_info *info, char __user *buf,
 			       size_t count, loff_t *ppos)
 {
@@ -1129,15 +1121,6 @@ ssize_t drm_fb_helper_sys_read(struct fb_info *info, char __user *buf,
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_read);
 
-/**
- * drm_fb_helper_sys_write - wrapper around fb_sys_write
- * @info: fb_info struct pointer
- * @buf: userspace buffer to write to framebuffer memory
- * @count: number of bytes to write to framebuffer memory
- * @ppos: write offset within framebuffer memory
- *
- * A wrapper around fb_sys_write implemented by fbdev core
- */
 ssize_t drm_fb_helper_sys_write(struct fb_info *info, const char __user *buf,
 				size_t count, loff_t *ppos)
 {
@@ -1151,14 +1134,9 @@ ssize_t drm_fb_helper_sys_write(struct fb_info *info, const char __user *buf,
 	return ret;
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_write);
+#endif
 
-/**
- * drm_fb_helper_sys_fillrect - wrapper around sys_fillrect
- * @info: fbdev registered by the helper
- * @rect: info about rectangle to fill
- *
- * A wrapper around sys_fillrect implemented by fbdev core
- */
+#if IS_ENABLED(CONFIG_FB_SYS_FILLRECT)
 void drm_fb_helper_sys_fillrect(struct fb_info *info,
 				const struct fb_fillrect *rect)
 {
@@ -1167,14 +1145,9 @@ void drm_fb_helper_sys_fillrect(struct fb_info *info,
 			    rect->width, rect->height);
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_fillrect);
+#endif
 
-/**
- * drm_fb_helper_sys_copyarea - wrapper around sys_copyarea
- * @info: fbdev registered by the helper
- * @area: info about area to copy
- *
- * A wrapper around sys_copyarea implemented by fbdev core
- */
+#if IS_ENABLED(CONFIG_FB_SYS_COPYAREA)
 void drm_fb_helper_sys_copyarea(struct fb_info *info,
 				const struct fb_copyarea *area)
 {
@@ -1183,14 +1156,9 @@ void drm_fb_helper_sys_copyarea(struct fb_info *info,
 			    area->width, area->height);
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_copyarea);
+#endif
 
-/**
- * drm_fb_helper_sys_imageblit - wrapper around sys_imageblit
- * @info: fbdev registered by the helper
- * @image: info about image to blit
- *
- * A wrapper around sys_imageblit implemented by fbdev core
- */
+#if IS_ENABLED(CONFIG_FB_SYS_IMAGEBLIT)
 void drm_fb_helper_sys_imageblit(struct fb_info *info,
 				 const struct fb_image *image)
 {
@@ -1199,6 +1167,7 @@ void drm_fb_helper_sys_imageblit(struct fb_info *info,
 			    image->width, image->height);
 }
 EXPORT_SYMBOL(drm_fb_helper_sys_imageblit);
+#endif
 
 /**
  * drm_fb_helper_cfb_fillrect - wrapper around cfb_fillrect
@@ -3053,11 +3022,25 @@ static struct fb_ops drm_fbdev_fb_ops = {
 	.fb_release	= drm_fbdev_fb_release,
 	.fb_destroy	= drm_fbdev_fb_destroy,
 	.fb_mmap	= drm_fbdev_fb_mmap,
+#if IS_ENABLED(CONFIG_FB_SYS_FOPS)
 	.fb_read	= drm_fb_helper_sys_read,
 	.fb_write	= drm_fb_helper_sys_write,
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_FILLRECT)
 	.fb_fillrect	= drm_fb_helper_sys_fillrect,
+#else
+	.fb_fillrect	= drm_fb_helper_cfb_fillrect,
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_COPYAREA)
 	.fb_copyarea	= drm_fb_helper_sys_copyarea,
+#else
+	.fb_copyarea	= drm_fb_helper_cfb_copyarea,
+#endif
+#if IS_ENABLED(CONFIG_FB_SYS_IMAGEBLIT)
 	.fb_imageblit	= drm_fb_helper_sys_imageblit,
+#else
+	.fb_imageblit	= drm_fb_helper_cfb_imageblit,
+#endif
 };
 
 static struct fb_deferred_io drm_fbdev_defio = {
