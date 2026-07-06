@@ -972,13 +972,6 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 #ifdef CONFIG_DRM_FBDEV_EMULATION
 	if (fbdev)
 		priv->fbdev = msm_fbdev_init(ddev);
-	if (priv->fbdev) {
-		/* Push fb0 to the panel immediately after cont-splash so
-		 * Plymouth (initramfs) paints a visible splash instead of a
-		 * blank/gray framebuffer.
-		 */
-		drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
-	}
 #endif
 
 	ret = sde_dbg_debugfs_register(dev);

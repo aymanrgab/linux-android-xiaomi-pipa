@@ -2620,7 +2620,7 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 	struct msm_display_info info;
 	struct drm_encoder *encoder = NULL;
 	struct drm_crtc *crtc = NULL;
-	int i, di, rc = 0;
+	int i, rc = 0;
 	struct drm_display_mode *drm_mode = NULL;
 	struct drm_device *dev;
 	struct msm_drm_private *priv;
@@ -2761,27 +2761,19 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 			SDE_ERROR("Failed: updating plane status rc=%d\n", rc);
 			return rc;
 		}
+	}
 
-		/* Release cont-splash resources immediately so fbdev/Plymouth
-		 * can modeset without waiting for the compositor (~20s). With
-		 * _sde_plane_validate_shared_crtc() allowing handoff, atomic
-		 * commits from drm_fb_helper_initial_config() can take over
-		 * the display right after fb0 is registered.
-		 */
-		sde_encoder_update_caps_for_cont_splash(encoder,
-				splash_display, false);
-		_sde_kms_free_splash_region(sde_kms, splash_display);
-
-		for (di = 0; di < sde_kms->dsi_display_count; ++di) {
-			struct dsi_display *dsi =
-				(struct dsi_display *)sde_kms->dsi_displays[di];
-
-			if (dsi && dsi->bridge &&
-			    dsi->bridge->base.encoder == encoder) {
-				dsi_display_splash_res_cleanup(dsi);
-				break;
-			}
-		}
+	/* Null atomic commit hands cont-splash off before fbdev init. Do not
+	 * call dsi_display_splash_res_cleanup() here: turning DSI clocks off
+	 * before a modeset leaves the panel black (SMMU faults + -EINVAL).
+	 */
+	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
+		splash_display = &sde_kms->splash_data.splash_display[i];
+		if (splash_display->cont_splash_enabled &&
+				splash_display->encoder &&
+				splash_display->encoder->crtc)
+			_sde_kms_null_commit(sde_kms->dev,
+					splash_display->encoder);
 	}
 
 	return rc;
