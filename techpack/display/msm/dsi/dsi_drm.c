@@ -221,12 +221,16 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 
 		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
 			DSI_INFO("skip set display config for video panel in fpc\n");
-			dsi_display_splash_res_cleanup(c_bridge->display);
+			rc = dsi_display_splash_res_cleanup(c_bridge->display);
+			DSI_INFO("dsi_display_splash_res_cleanup returned %d, is_cont_splash_enabled=%d\n",
+				rc, c_bridge->display->is_cont_splash_enabled);
 			return;
 		} else if (c_bridge->display->panel->panel_mode == DSI_OP_CMD_MODE &&
 		    c_bridge->dsi_mode.dsi_mode_flags != DSI_MODE_FLAG_DMS) {
 			DSI_INFO("skip set display config because timming not switch for command panel\n");
-			dsi_display_splash_res_cleanup(c_bridge->display);
+			rc = dsi_display_splash_res_cleanup(c_bridge->display);
+			DSI_INFO("dsi_display_splash_res_cleanup returned %d, is_cont_splash_enabled=%d\n",
+				rc, c_bridge->display->is_cont_splash_enabled);
 			return;
 		}
 	}
