@@ -28,22 +28,6 @@ extern int msm_gem_mmap_obj(struct drm_gem_object *obj,
 					struct vm_area_struct *vma);
 static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma);
 
-static int msm_fbdev_fb_open(struct fb_info *info, int user)
-{
-	struct drm_fb_helper *helper = info->par;
-	struct msm_drm_private *priv = helper->dev->dev_private;
-	struct msm_kms *kms = priv->kms;
-
-	if (!user)
-		return 0;
-
-	if (kms && kms->funcs && kms->funcs->check_for_splash &&
-	    kms->funcs->check_for_splash(kms, NULL))
-		return drm_fb_helper_restore_fbdev_mode_unlocked(helper);
-
-	return 0;
-}
-
 /*
  * fbdev funcs, to implement legacy fbdev interface on top of drm driver
  */
@@ -59,7 +43,6 @@ static struct fb_ops msm_fb_ops = {
 	.owner = THIS_MODULE,
 	DRM_FB_HELPER_DEFAULT_OPS,
 
-	.fb_open = msm_fbdev_fb_open,
 	.fb_fillrect = drm_fb_helper_cfb_fillrect,
 	.fb_copyarea = drm_fb_helper_cfb_copyarea,
 	.fb_imageblit = drm_fb_helper_cfb_imageblit,
