@@ -110,6 +110,8 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms);
 static int _sde_kms_mmu_init(struct sde_kms *sde_kms);
 static int _sde_kms_register_events(struct msm_kms *kms,
 		struct drm_mode_object *obj, u32 event, bool en);
+static void _sde_kms_null_commit(struct drm_device *dev,
+		struct drm_encoder *enc);
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
@@ -2761,6 +2763,20 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 		}
 	}
 
+	/* trigger a null commit to release cont-splash and perform handoff,
+	 * before fbdev/Plymouth starts, so that the first userspace commit
+	 * does not get blocked by the cont-splash plane validation check.
+	 * This mirrors the handoff done during pm_suspend.
+	 */
+	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
+		splash_display = &sde_kms->splash_data.splash_display[i];
+		if (splash_display->cont_splash_enabled &&
+				splash_display->encoder &&
+				splash_display->encoder->crtc)
+			_sde_kms_null_commit(sde_kms->dev,
+					splash_display->encoder);
+	}
+
 	return rc;
 }
 
@@ -3599,6 +3615,7 @@ static int _sde_kms_hw_init_ioremap(struct sde_kms *sde_kms,
 		if (rc)
 			SDE_ERROR("dbg base register sw_fuse failed: %d\n", rc);
 	}
+
 error:
 	return rc;
 }
