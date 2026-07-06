@@ -1043,6 +1043,18 @@ static int msm_open(struct drm_device *dev, struct drm_file *file)
 	return context_init(dev, file);
 }
 
+static int msm_drm_master_set(struct drm_device *dev,
+		struct drm_file *file, bool new_master)
+{
+	struct msm_drm_private *priv = dev->dev_private;
+	struct msm_kms *kms = priv ? priv->kms : NULL;
+
+	if (kms && kms->funcs && kms->funcs->cont_splash_handoff_on_master)
+		return kms->funcs->cont_splash_handoff_on_master(kms);
+
+	return 0;
+}
+
 static void context_close(struct msm_file_private *ctx)
 {
 	kfree(ctx);
@@ -1848,6 +1860,7 @@ static struct drm_driver msm_driver = {
 				DRIVER_ATOMIC |
 				DRIVER_MODESET,
 	.open               = msm_open,
+	.master_set         = msm_drm_master_set,
 	.postclose          = msm_postclose,
 	.lastclose          = msm_lastclose,
 	.irq_handler        = msm_irq,
