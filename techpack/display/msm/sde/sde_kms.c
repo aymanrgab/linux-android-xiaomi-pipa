@@ -1078,15 +1078,6 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 	if (!crtc->state->active || !sde_kms->splash_data.num_splash_displays)
 		return;
 
-	/* only release cont_splash during userspace-originated atomic commits.
-	 * kernel-internal commits (e.g. fbdev init at ~3s) must wait until
-	 * Plymouth issues the first userspace modeset at ~18s.
-	 */
-	if (!sde_kms->base.userspace_commit) {
-		SDE_DEBUG("cont_splash release blocked: not from userspace\n");
-		return;
-	}
-
 	SDE_EVT32(DRMID(crtc), crtc->state->active,
 			sde_kms->splash_data.num_splash_displays);
 
