@@ -1049,6 +1049,10 @@ static int msm_drm_master_set(struct drm_device *dev,
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_kms *kms = priv ? priv->kms : NULL;
 
+	if (new_master)
+		DRM_INFO("pipa: drm master set comm=%s\n",
+				current ? current->comm : "?");
+
 	if (kms && kms->funcs && kms->funcs->cont_splash_handoff_on_master)
 		return kms->funcs->cont_splash_handoff_on_master(kms);
 
