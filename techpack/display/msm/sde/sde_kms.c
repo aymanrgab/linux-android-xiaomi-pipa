@@ -113,6 +113,7 @@ static int _sde_kms_register_events(struct msm_kms *kms,
 static void _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc);
 static bool sde_kms_userspace_splash_handoff_done;
+static void sde_kms_try_cont_splash_handoff(struct msm_kms *kms);
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
@@ -2517,6 +2518,9 @@ static void _sde_kms_post_open(struct msm_kms *kms, struct drm_file *file)
 		return;
 	}
 
+	if (file && drm_is_primary_client(file))
+		sde_kms_try_cont_splash_handoff(kms);
+
 	sde_kms = to_sde_kms(kms);
 	dev = sde_kms->dev;
 
@@ -2768,52 +2772,51 @@ static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc)
 
 }
 
-static int sde_kms_cont_splash_handoff_on_master(struct msm_kms *kms)
+static void sde_kms_try_cont_splash_handoff(struct msm_kms *kms)
 {
 	struct sde_kms *sde_kms;
-	struct sde_splash_display *splash_display;
-	int i;
+	struct drm_device *dev;
+	struct drm_encoder *enc;
+	bool did_handoff = false;
+	bool still_in_splash = false;
 
-	if (!kms || sde_kms_userspace_splash_handoff_done) {
-		pr_warn("pipa: handoff skip kms=%d done=%d\n", kms ? 1 : 0,
-			sde_kms_userspace_splash_handoff_done);
-		return 0;
-	}
+	if (!kms || sde_kms_userspace_splash_handoff_done)
+		return;
 
-	if (!current || !current->mm) {
-		pr_warn("pipa: handoff skip no-mm comm=%s\n",
-			current ? current->comm : "?");
-		return 0;
-	}
+	if (!current || !current->mm)
+		return;
 
 	sde_kms = to_sde_kms(kms);
-	pr_warn("pipa: handoff enter comm=%s num_splash=%d dsi_count=%d\n",
-		current->comm, sde_kms->splash_data.num_splash_displays,
-		sde_kms->dsi_display_count);
-	if (!sde_kms->splash_data.num_splash_displays)
-		return 0;
+	dev = sde_kms->dev;
+	if (!dev)
+		return;
 
-	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY, sde_kms->splash_data.num_splash_displays);
+	/*
+	 * splash_data.num_splash_displays can be zeroed during early KMS init
+	 * (_sde_kms_free_splash_region) while the encoder still reports
+	 * cont_splash_enabled until a null commit runs.  Mirror pm_suspend.
+	 */
+	drm_for_each_encoder(enc, dev) {
+		if (!sde_encoder_in_cont_splash(enc))
+			continue;
 
-	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
-		splash_display = &sde_kms->splash_data.splash_display[i];
-
-		pr_warn("pipa: handoff disp %d cont=%d enc=%d crtc=%d\n", i,
-			splash_display->cont_splash_enabled ? 1 : 0,
-			splash_display->encoder ? 1 : 0,
-			(splash_display->encoder && splash_display->encoder->crtc)
-				? 1 : 0);
-
-		if (splash_display->cont_splash_enabled &&
-				splash_display->encoder &&
-				splash_display->encoder->crtc)
-			_sde_kms_null_commit(sde_kms->dev,
-					splash_display->encoder);
+		still_in_splash = true;
+		if (enc->crtc) {
+			_sde_kms_null_commit(dev, enc);
+			did_handoff = true;
+		}
 	}
 
-	sde_kms_userspace_splash_handoff_done = true;
-	DRM_INFO("cont_splash handoff for userspace DRM master\n");
+	if (did_handoff || !still_in_splash)
+		sde_kms_userspace_splash_handoff_done = true;
 
+	if (did_handoff)
+		DRM_INFO("cont_splash handoff for userspace DRM master\n");
+}
+
+static int sde_kms_cont_splash_handoff_on_master(struct msm_kms *kms)
+{
+	sde_kms_try_cont_splash_handoff(kms);
 	return 0;
 }
 

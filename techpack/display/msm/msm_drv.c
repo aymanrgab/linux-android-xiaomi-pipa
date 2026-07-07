@@ -1049,12 +1049,6 @@ static int msm_drm_master_set(struct drm_device *dev,
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_kms *kms = priv ? priv->kms : NULL;
 
-	pr_warn("pipa: master_set new=%d comm=%s mm=%d kms=%d handoff_fn=%d\n",
-		new_master, current ? current->comm : "?",
-		(current && current->mm) ? 1 : 0, kms ? 1 : 0,
-		(kms && kms->funcs && kms->funcs->cont_splash_handoff_on_master)
-			? 1 : 0);
-
 	if (kms && kms->funcs && kms->funcs->cont_splash_handoff_on_master)
 		return kms->funcs->cont_splash_handoff_on_master(kms);
 
