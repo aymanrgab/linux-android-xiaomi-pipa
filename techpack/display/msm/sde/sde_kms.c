@@ -2135,6 +2135,40 @@ static void _sde_kms_plane_force_remove(struct drm_plane *plane,
 				plane->base.id);
 }
 
+static void _sde_kms_disable_splash_planes(struct sde_kms *sde_kms,
+		struct drm_atomic_state *state,
+		struct sde_splash_display *splash_display)
+{
+	struct msm_drm_private *priv;
+	struct drm_plane *plane;
+	int i, j;
+	u32 plane_id;
+	bool is_virtual;
+
+	if (!sde_kms || !state || !splash_display)
+		return;
+
+	priv = sde_kms->dev->dev_private;
+	if (!priv)
+		return;
+
+	for (i = 0; i < priv->num_planes; i++) {
+		plane = priv->planes[i];
+		plane_id = sde_plane_pipe(plane);
+		is_virtual = is_sde_plane_virtual(plane);
+
+		for (j = 0; j < splash_display->pipe_cnt; j++) {
+			if (plane_id != splash_display->pipes[j].sspp ||
+			    splash_display->pipes[j].is_virtual != is_virtual)
+				continue;
+
+			DRM_INFO("pipa: disable splash plane%d pipe:%d\n",
+					plane->base.id, plane_id);
+			_sde_kms_plane_force_remove(plane, state);
+		}
+	}
+}
+
 static int _sde_kms_remove_fbs(struct sde_kms *sde_kms, struct drm_file *file,
 		struct drm_atomic_state *state)
 {
@@ -2909,10 +2943,13 @@ static int sde_kms_get_mixer_count(const struct msm_kms *kms,
 static void _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc)
 {
+	struct sde_kms *sde_kms = to_sde_kms(dev->dev_private->kms);
+	struct sde_splash_display *splash_display;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_atomic_state *state = NULL;
 	int retry_cnt = 0;
 	int ret = 0;
+	int i;
 
 	drm_modeset_acquire_init(&ctx, 0);
 
@@ -2938,6 +2975,14 @@ retry:
 	ret = sde_kms_set_crtc_for_conn(dev, enc, state);
 	if (ret)
 		goto end;
+
+	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
+		splash_display = &sde_kms->splash_data.splash_display[i];
+		if (splash_display->cont_splash_enabled &&
+		    splash_display->encoder == enc)
+			_sde_kms_disable_splash_planes(sde_kms, state,
+					splash_display);
+	}
 
 	ret = drm_atomic_commit(state);
 	if (ret)
