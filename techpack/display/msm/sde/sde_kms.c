@@ -2774,13 +2774,22 @@ static int sde_kms_cont_splash_handoff_on_master(struct msm_kms *kms)
 	struct sde_splash_display *splash_display;
 	int i;
 
-	if (!kms || sde_kms_userspace_splash_handoff_done)
+	if (!kms || sde_kms_userspace_splash_handoff_done) {
+		pr_warn("pipa: handoff skip kms=%d done=%d\n", kms ? 1 : 0,
+			sde_kms_userspace_splash_handoff_done);
 		return 0;
+	}
 
-	if (!current || !current->mm)
+	if (!current || !current->mm) {
+		pr_warn("pipa: handoff skip no-mm comm=%s\n",
+			current ? current->comm : "?");
 		return 0;
+	}
 
 	sde_kms = to_sde_kms(kms);
+	pr_warn("pipa: handoff enter comm=%s num_splash=%d dsi_count=%d\n",
+		current->comm, sde_kms->splash_data.num_splash_displays,
+		sde_kms->dsi_display_count);
 	if (!sde_kms->splash_data.num_splash_displays)
 		return 0;
 
@@ -2788,6 +2797,12 @@ static int sde_kms_cont_splash_handoff_on_master(struct msm_kms *kms)
 
 	for (i = 0; i < sde_kms->dsi_display_count; ++i) {
 		splash_display = &sde_kms->splash_data.splash_display[i];
+
+		pr_warn("pipa: handoff disp %d cont=%d enc=%d crtc=%d\n", i,
+			splash_display->cont_splash_enabled ? 1 : 0,
+			splash_display->encoder ? 1 : 0,
+			(splash_display->encoder && splash_display->encoder->crtc)
+				? 1 : 0);
 
 		if (splash_display->cont_splash_enabled &&
 				splash_display->encoder &&
