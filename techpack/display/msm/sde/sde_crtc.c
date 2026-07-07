@@ -4945,10 +4945,14 @@ static int _sde_crtc_atomic_check_pstates(struct drm_crtc *crtc,
 	 * use pstates sorted by stage to check planes on same stage
 	 * we assume that all pipes are in source split so its valid to compare
 	 * without taking into account left/right mixer placement
+	 * skip for non-custom clients since planes at same stage
+	 * are overlapping, not source-split pairs
 	 */
-	rc = _sde_crtc_validate_src_split_order(crtc, pstates, cnt);
-	if (rc)
-		return rc;
+	if (sde_is_custom_client()) {
+		rc = _sde_crtc_validate_src_split_order(crtc, pstates, cnt);
+		if (rc)
+			return rc;
+	}
 
 	return 0;
 }
