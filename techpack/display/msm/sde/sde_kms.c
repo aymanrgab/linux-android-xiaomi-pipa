@@ -110,23 +110,6 @@ static int _sde_kms_mmu_destroy(struct sde_kms *sde_kms);
 static int _sde_kms_mmu_init(struct sde_kms *sde_kms);
 static int _sde_kms_register_events(struct msm_kms *kms,
 		struct drm_mode_object *obj, u32 event, bool en);
-static void _sde_kms_null_commit(struct drm_device *dev,
-		struct drm_encoder *enc);
-static bool sde_kms_userspace_splash_handoff_done;
-static bool sde_kms_allow_splash_release;
-static void sde_kms_try_cont_splash_handoff(struct msm_kms *kms);
-
-static bool sde_kms_splash_still_active(struct sde_kms *sde_kms)
-{
-	int i;
-
-	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
-		if (sde_kms->splash_data.splash_display[i].cont_splash_enabled)
-			return true;
-	}
-
-	return false;
-}
 bool sde_is_custom_client(void)
 {
 	return sdecustom;
@@ -1069,14 +1052,14 @@ static void sde_kms_commit(struct msm_kms *kms,
 static void _sde_kms_free_splash_region(struct sde_kms *sde_kms,
 		struct sde_splash_display *splash_display)
 {
-	if (!sde_kms || !splash_display || !splash_display->cont_splash_enabled)
+	if (!sde_kms || !splash_display ||
+			!sde_kms->splash_data.num_splash_displays)
 		return;
 
 	_sde_kms_splash_mem_put(sde_kms, splash_display->splash);
-	if (sde_kms->splash_data.num_splash_displays)
-		sde_kms->splash_data.num_splash_displays--;
-	DRM_INFO("cont_splash handoff done, remaining:%d\n",
-			sde_kms->splash_data.num_splash_displays);
+	sde_kms->splash_data.num_splash_displays--;
+	SDE_DEBUG("cont_splash handoff done, remaining:%d\n",
+				sde_kms->splash_data.num_splash_displays);
 	memset(splash_display, 0x0, sizeof(struct sde_splash_display));
 }
 
@@ -1092,15 +1075,7 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 
 	priv = sde_kms->dev->dev_private;
 
-	if (!crtc->state->active)
-		return;
-
-	/* Only release splash from an intentional null-commit handoff */
-	if (!sde_kms_allow_splash_release)
-		return;
-
-	if (!sde_kms->splash_data.num_splash_displays &&
-			!sde_kms_splash_still_active(sde_kms))
+	if (!crtc->state->active || !sde_kms->splash_data.num_splash_displays)
 		return;
 
 	SDE_EVT32(DRMID(crtc), crtc->state->active,
@@ -2135,40 +2110,6 @@ static void _sde_kms_plane_force_remove(struct drm_plane *plane,
 				plane->base.id);
 }
 
-static void _sde_kms_disable_splash_planes(struct sde_kms *sde_kms,
-		struct drm_atomic_state *state,
-		struct sde_splash_display *splash_display)
-{
-	struct msm_drm_private *priv;
-	struct drm_plane *plane;
-	int i, j;
-	u32 plane_id;
-	bool is_virtual;
-
-	if (!sde_kms || !state || !splash_display)
-		return;
-
-	priv = sde_kms->dev->dev_private;
-	if (!priv)
-		return;
-
-	for (i = 0; i < priv->num_planes; i++) {
-		plane = priv->planes[i];
-		plane_id = sde_plane_pipe(plane);
-		is_virtual = is_sde_plane_virtual(plane);
-
-		for (j = 0; j < splash_display->pipe_cnt; j++) {
-			if (plane_id != splash_display->pipes[j].sspp ||
-			    splash_display->pipes[j].is_virtual != is_virtual)
-				continue;
-
-			DRM_INFO("pipa: disable splash plane%d pipe:%d\n",
-					plane->base.id, plane_id);
-			_sde_kms_plane_force_remove(plane, state);
-		}
-	}
-}
-
 static int _sde_kms_remove_fbs(struct sde_kms *sde_kms, struct drm_file *file,
 		struct drm_atomic_state *state)
 {
@@ -2573,12 +2514,6 @@ static void _sde_kms_post_open(struct msm_kms *kms, struct drm_file *file)
 		return;
 	}
 
-	if (file && drm_is_primary_client(file)) {
-		DRM_INFO("pipa: drm postopen comm=%s\n",
-				current ? current->comm : "?");
-		sde_kms_try_cont_splash_handoff(kms);
-	}
-
 	sde_kms = to_sde_kms(kms);
 	dev = sde_kms->dev;
 
@@ -2830,70 +2765,6 @@ static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc)
 
 }
 
-static void sde_kms_try_cont_splash_handoff(struct msm_kms *kms)
-{
-	struct sde_kms *sde_kms;
-	struct sde_splash_display *splash_display;
-	struct drm_device *dev;
-	struct drm_encoder *enc;
-	int i;
-	bool did_handoff = false;
-
-	if (!kms || sde_kms_userspace_splash_handoff_done)
-		return;
-
-	sde_kms = to_sde_kms(kms);
-	dev = sde_kms->dev;
-	if (!dev)
-		return;
-
-	if (!sde_kms_splash_still_active(sde_kms)) {
-		sde_kms_userspace_splash_handoff_done = true;
-		return;
-	}
-
-	/*
-	 * Use splash_data, not sde_encoder_in_cont_splash(): the phys encoder
-	 * cur_master flag can be unset while splash_display still owns planes
-	 * (see validate_shared_crtc).  A premature "done" there left splash
-	 * active and caused zpos failures when the compositor started.
-	 */
-	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
-		splash_display = &sde_kms->splash_data.splash_display[i];
-
-		if (!splash_display->cont_splash_enabled)
-			continue;
-
-		enc = splash_display->encoder;
-		if (!enc || !enc->crtc) {
-			DRM_INFO("pipa: cont_splash wait enc=%d crtc=%d comm=%s\n",
-					enc ? enc->base.id : -1,
-					(enc && enc->crtc) ? enc->crtc->base.id : -1,
-					current ? current->comm : "?");
-			continue;
-		}
-
-		DRM_INFO("pipa: cont_splash null-commit enc=%d crtc=%d comm=%s\n",
-				enc->base.id, enc->crtc->base.id,
-				current ? current->comm : "?");
-		sde_kms_allow_splash_release = true;
-		_sde_kms_null_commit(dev, enc);
-		sde_kms_allow_splash_release = false;
-		did_handoff = true;
-	}
-
-	if (did_handoff) {
-		sde_kms_userspace_splash_handoff_done = true;
-		DRM_INFO("cont_splash handoff for userspace DRM client\n");
-	}
-}
-
-static int sde_kms_cont_splash_handoff_on_master(struct msm_kms *kms)
-{
-	sde_kms_try_cont_splash_handoff(kms);
-	return 0;
-}
-
 static int sde_kms_get_mixer_count(const struct msm_kms *kms,
 		const struct drm_display_mode *mode,
 		const struct msm_resource_caps_info *res, u32 *num_lm)
@@ -2943,14 +2814,10 @@ static int sde_kms_get_mixer_count(const struct msm_kms *kms,
 static void _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc)
 {
-	struct msm_drm_private *priv = dev->dev_private;
-	struct sde_kms *sde_kms = priv ? to_sde_kms(priv->kms) : NULL;
-	struct sde_splash_display *splash_display;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_atomic_state *state = NULL;
 	int retry_cnt = 0;
 	int ret = 0;
-	int i;
 
 	drm_modeset_acquire_init(&ctx, 0);
 
@@ -2976,16 +2843,6 @@ retry:
 	ret = sde_kms_set_crtc_for_conn(dev, enc, state);
 	if (ret)
 		goto end;
-
-	if (sde_kms) {
-		for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
-			splash_display = &sde_kms->splash_data.splash_display[i];
-			if (splash_display->cont_splash_enabled &&
-			    splash_display->encoder == enc)
-				_sde_kms_disable_splash_planes(sde_kms, state,
-						splash_display);
-		}
-	}
 
 	ret = drm_atomic_commit(state);
 	if (ret)
@@ -3072,11 +2929,8 @@ static int sde_kms_pm_suspend(struct device *dev)
 
 	/* if a display stuck in CS trigger a null commit to complete handoff */
 	drm_for_each_encoder(enc, ddev) {
-		if (sde_encoder_in_cont_splash(enc) && enc->crtc) {
-			sde_kms_allow_splash_release = true;
+		if (sde_encoder_in_cont_splash(enc) && enc->crtc)
 			_sde_kms_null_commit(ddev, enc);
-			sde_kms_allow_splash_release = false;
-		}
 	}
 
 	/* acquire modeset lock(s) */
@@ -3282,7 +3136,6 @@ static const struct msm_kms_funcs kms_funcs = {
 	.get_address_space_device = _sde_kms_get_address_space_device,
 	.postopen = _sde_kms_post_open,
 	.check_for_splash = sde_kms_check_for_splash,
-	.cont_splash_handoff_on_master = sde_kms_cont_splash_handoff_on_master,
 	.get_mixer_count = sde_kms_get_mixer_count,
 };
 

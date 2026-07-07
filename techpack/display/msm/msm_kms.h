@@ -122,8 +122,6 @@ struct msm_kms_funcs {
 	int (*cont_splash_config)(struct msm_kms *kms);
 	/* check for continuous splash status */
 	bool (*check_for_splash)(struct msm_kms *kms, struct drm_crtc *crtc);
-	/* hand off cont-splash when userspace acquires DRM master (Plymouth) */
-	int (*cont_splash_handoff_on_master)(struct msm_kms *kms);
 	/* topology information */
 	int (*get_mixer_count)(const struct msm_kms *kms,
 			const struct drm_display_mode *mode,

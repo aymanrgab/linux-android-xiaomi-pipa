@@ -2550,21 +2550,11 @@ static int _sde_plane_validate_shared_crtc(struct sde_plane *psde,
 
 				if (splash_display->pipes[j].sspp ==
 						psde->pipe) {
-					/*
-					 * Block kernel-internal commits during
-					 * cont-splash; only userspace (Plymouth)
-					 * may trigger handoff via null commit.
-					 */
-					if (!current || !current->mm) {
-						SDE_ERROR_PLANE(psde,
-							"pipe:%d used in cont-splash on crtc:%d\n",
-							psde->pipe,
-							splash_display->encoder->crtc->base.id);
-						return -EINVAL;
-					}
-					pr_warn("plane%d pipe:%d used in cont-splash on crtc:%d, allowing handoff\n",
-						psde ? psde->base.base.id : -1, psde->pipe,
-						splash_display->encoder->crtc->base.id);
+					SDE_ERROR_PLANE(psde,
+					"pipe:%d used in cont-splash on crtc:%d\n",
+					psde->pipe,
+					splash_display->encoder->crtc->base.id);
+					return -EINVAL;
 				}
 			}
 		}
