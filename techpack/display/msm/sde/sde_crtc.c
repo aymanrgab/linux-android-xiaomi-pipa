@@ -4850,13 +4850,23 @@ static int _sde_crtc_check_zpos(struct drm_crtc_state *state,
 
 	if (!sde_is_custom_client()) {
 		int stage_old = pstates[0].stage;
+		int per_stage_cnt = 0;
 
 		z_pos = 0;
 		for (i = 0; i < cnt; i++) {
-			if (stage_old != pstates[i].stage)
+			if (stage_old != pstates[i].stage) {
 				++z_pos;
+				per_stage_cnt = 0;
+			}
 			stage_old = pstates[i].stage;
+
+			if (per_stage_cnt >= 2) {
+				++z_pos;
+				per_stage_cnt = 0;
+			}
+
 			pstates[i].stage = z_pos;
+			per_stage_cnt++;
 		}
 	}
 
