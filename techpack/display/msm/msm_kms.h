@@ -136,6 +136,9 @@ struct msm_kms {
 
 	/* mapper-id used to request GEM buffer mapped for scanout: */
 	struct msm_gem_address_space *aspace;
+
+	/* set when atomic_commit originates from userspace process context */
+	bool userspace_commit;
 };
 
 /**

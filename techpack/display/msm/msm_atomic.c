@@ -661,6 +661,11 @@ int msm_atomic_commit(struct drm_device *dev,
 	}
 
 	SDE_ATRACE_BEGIN("atomic_commit");
+
+	/* detect userspace-initiated commit for cont_splash handoff */
+	if (priv->kms)
+		priv->kms->userspace_commit = (current->mm != NULL);
+
 	ret = drm_atomic_helper_prepare_planes(dev, state);
 	if (ret) {
 		SDE_ATRACE_END("atomic_commit");
