@@ -113,6 +113,7 @@ static int _sde_kms_register_events(struct msm_kms *kms,
 static void _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc);
 static bool sde_kms_userspace_splash_handoff_done;
+static bool sde_kms_allow_splash_release;
 static void sde_kms_try_cont_splash_handoff(struct msm_kms *kms);
 
 static bool sde_kms_splash_still_active(struct sde_kms *sde_kms)
@@ -1092,6 +1093,10 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 	priv = sde_kms->dev->dev_private;
 
 	if (!crtc->state->active)
+		return;
+
+	/* Only release splash from an intentional null-commit handoff */
+	if (!sde_kms_allow_splash_release)
 		return;
 
 	if (!sde_kms->splash_data.num_splash_displays &&
@@ -2837,7 +2842,9 @@ static void sde_kms_try_cont_splash_handoff(struct msm_kms *kms)
 		DRM_INFO("pipa: cont_splash null-commit enc=%d crtc=%d comm=%s\n",
 				enc->base.id, enc->crtc->base.id,
 				current ? current->comm : "?");
+		sde_kms_allow_splash_release = true;
 		_sde_kms_null_commit(dev, enc);
+		sde_kms_allow_splash_release = false;
 		did_handoff = true;
 	}
 
@@ -3017,8 +3024,11 @@ static int sde_kms_pm_suspend(struct device *dev)
 
 	/* if a display stuck in CS trigger a null commit to complete handoff */
 	drm_for_each_encoder(enc, ddev) {
-		if (sde_encoder_in_cont_splash(enc) && enc->crtc)
+		if (sde_encoder_in_cont_splash(enc) && enc->crtc) {
+			sde_kms_allow_splash_release = true;
 			_sde_kms_null_commit(ddev, enc);
+			sde_kms_allow_splash_release = false;
+		}
 	}
 
 	/* acquire modeset lock(s) */
