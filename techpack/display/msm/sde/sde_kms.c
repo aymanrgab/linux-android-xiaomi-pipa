@@ -2943,7 +2943,8 @@ static int sde_kms_get_mixer_count(const struct msm_kms *kms,
 static void _sde_kms_null_commit(struct drm_device *dev,
 		struct drm_encoder *enc)
 {
-	struct sde_kms *sde_kms = to_sde_kms(dev->dev_private->kms);
+	struct msm_drm_private *priv = dev->dev_private;
+	struct sde_kms *sde_kms = priv ? to_sde_kms(priv->kms) : NULL;
 	struct sde_splash_display *splash_display;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_atomic_state *state = NULL;
@@ -2976,12 +2977,14 @@ retry:
 	if (ret)
 		goto end;
 
-	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
-		splash_display = &sde_kms->splash_data.splash_display[i];
-		if (splash_display->cont_splash_enabled &&
-		    splash_display->encoder == enc)
-			_sde_kms_disable_splash_planes(sde_kms, state,
-					splash_display);
+	if (sde_kms) {
+		for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
+			splash_display = &sde_kms->splash_data.splash_display[i];
+			if (splash_display->cont_splash_enabled &&
+			    splash_display->encoder == enc)
+				_sde_kms_disable_splash_planes(sde_kms, state,
+						splash_display);
+		}
 	}
 
 	ret = drm_atomic_commit(state);
