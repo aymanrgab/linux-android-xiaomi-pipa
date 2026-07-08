@@ -289,6 +289,9 @@ struct sde_kms {
 
 	bool has_danger_ctrl;
 
+	/* Live scanout framebuffer(s) for Plymouth/minui during cont_splash */
+	struct drm_framebuffer *cont_splash_fb[MAX_DSI_DISPLAYS];
+
 	struct sde_kms_smmu_state_data smmu_state;
 	atomic_t detach_sec_cb;
 	atomic_t detach_all_cb;
@@ -664,7 +667,8 @@ void sde_kms_timeline_status(struct drm_device *dev);
  */
 int sde_kms_handle_recovery(struct drm_encoder *encoder);
 
-void sde_kms_kickoff_count(struct sde_kms *sde_kms);
+bool sde_kms_cont_splash_blocks_set_config(struct drm_crtc *crtc,
+		struct drm_framebuffer *new_fb);
 
 /**
  * sde_kms_update_pm_qos_irq_request - Update Qos vote for CPU receiving

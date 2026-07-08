@@ -21,6 +21,7 @@
 
 #include <drm/drm_crtc.h>
 #include <drm/drm_fixed.h>
+#include <drm/drm_fourcc.h>
 #include <drm/drm_panel.h>
 #include <linux/debugfs.h>
 #include <linux/of_address.h>
@@ -1094,6 +1095,10 @@ static void _sde_kms_release_splash_resource(struct sde_kms *sde_kms,
 	if (splash_display->cont_splash_enabled) {
 		sde_encoder_update_caps_for_cont_splash(splash_display->encoder,
 				splash_display, false);
+		if (sde_kms->cont_splash_fb[i]) {
+			drm_framebuffer_remove(sde_kms->cont_splash_fb[i]);
+			sde_kms->cont_splash_fb[i] = NULL;
+		}
 		_sde_kms_free_splash_region(sde_kms, splash_display);
 	}
 
@@ -2735,9 +2740,116 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 			SDE_ERROR("Failed: updating plane status rc=%d\n", rc);
 			return rc;
 		}
+
+		rc = sde_kms_setup_cont_splash_fb(sde_kms, splash_display,
+				crtc, drm_mode, i);
+		if (rc)
+			SDE_ERROR("cont_splash live fb setup failed: %d\n", rc);
 	}
 
 	return rc;
+}
+
+static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
+		struct sde_splash_display *splash_display,
+		struct drm_crtc *crtc,
+		struct drm_display_mode *mode,
+		int idx)
+{
+	struct sde_splash_mem *splash;
+	struct drm_device *dev;
+	u32 width, height, pitch, format;
+	struct drm_framebuffer *fb;
+
+	if (!sde_kms || !splash_display || !crtc || !mode || idx >= MAX_DSI_DISPLAYS)
+		return -EINVAL;
+
+	if (sde_kms->cont_splash_fb[idx])
+		return 0;
+
+	splash = splash_display->splash;
+	if (!splash || !splash->splash_buf_base)
+		return -EINVAL;
+
+	dev = sde_kms->dev;
+	width = mode->hdisplay;
+	height = mode->vdisplay;
+	pitch = align_pitch(width, 32);
+	format = DRM_FORMAT_ABGR8888;
+
+	fb = msm_alloc_cont_splash_fb(dev, width, height, pitch, format,
+			splash->splash_buf_base, splash->splash_buf_size);
+	if (IS_ERR(fb))
+		return PTR_ERR(fb);
+
+	mutex_lock(&dev->mode_config.mutex);
+	crtc->state->fb = fb;
+	drm_framebuffer_get(fb);
+	mutex_unlock(&dev->mode_config.mutex);
+
+	sde_kms->cont_splash_fb[idx] = fb;
+	DRM_INFO("pipa: cont_splash live fb on crtc %d (%dx%d)\n",
+			crtc->base.id, width, height);
+
+	return 0;
+}
+
+static int sde_kms_get_cont_splash_fb(struct msm_kms *kms,
+		struct msm_cont_splash_fb *info)
+{
+	struct sde_kms *sde_kms;
+	struct drm_framebuffer *fb;
+	int i;
+
+	if (!kms || !info)
+		return -EINVAL;
+
+	sde_kms = to_sde_kms(kms);
+	memset(info, 0, sizeof(*info));
+
+	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
+		fb = sde_kms->cont_splash_fb[i];
+		if (fb) {
+			info->valid = true;
+			info->fb = fb;
+			info->width = fb->width;
+			info->height = fb->height;
+			info->pitch = fb->pitches[0];
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+
+bool sde_kms_cont_splash_blocks_set_config(struct drm_crtc *crtc,
+		struct drm_framebuffer *new_fb)
+{
+	struct msm_drm_private *priv;
+	struct sde_kms *sde_kms;
+	int i;
+
+	if (!crtc || !crtc->dev || !crtc->dev->dev_private)
+		return false;
+
+	priv = crtc->dev->dev_private;
+	if (!priv->kms)
+		return false;
+
+	sde_kms = to_sde_kms(priv->kms);
+	if (!sde_kms_check_for_splash(priv->kms, crtc))
+		return false;
+
+	for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
+		if (!sde_kms->cont_splash_fb[i])
+			continue;
+		if (new_fb == sde_kms->cont_splash_fb[i])
+			return false;
+	}
+
+	DRM_DEBUG_KMS("crtc %d: block legacy modeset during cont_splash\n",
+			crtc->base.id);
+	return true;
 }
 
 static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc)
@@ -3136,6 +3248,7 @@ static const struct msm_kms_funcs kms_funcs = {
 	.get_address_space_device = _sde_kms_get_address_space_device,
 	.postopen = _sde_kms_post_open,
 	.check_for_splash = sde_kms_check_for_splash,
+	.get_cont_splash_fb = sde_kms_get_cont_splash_fb,
 	.get_mixer_count = sde_kms_get_mixer_count,
 };
 

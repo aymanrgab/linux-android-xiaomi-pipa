@@ -24,6 +24,7 @@
 
 /* Additional internal-use only BO flags: */
 #define MSM_BO_STOLEN        0x10000000    /* try to use stolen/splash memory */
+#define MSM_BO_CONT_SPLASH   0x08000000    /* bootloader cont_splash reserved region */
 #define MSM_BO_KEEPATTRS     0x20000000    /* keep h/w bus attributes */
 #define MSM_BO_SKIPSYNC      0x40000000    /* skip dmabuf cpu sync */
 #define MSM_BO_EXTBUF        0x80000000    /* indicate BO is an import buffer */
@@ -131,6 +132,8 @@ struct msm_gem_object {
 	 * an IOMMU.  Also used for stolen/splashscreen buffer.
 	 */
 	struct drm_mm_node *vram_node;
+	/* Physical base when MSM_BO_CONT_SPLASH is set */
+	unsigned long cont_splash_paddr;
 	struct mutex lock; /* Protects resources associated with bo */
 	struct list_head iova_list;
 

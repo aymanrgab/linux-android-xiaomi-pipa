@@ -6392,13 +6392,22 @@ static int sde_crtc_late_register(struct drm_crtc *crtc)
 	return _sde_crtc_init_debugfs(crtc);
 }
 
+static int sde_crtc_set_config(struct drm_crtc *crtc,
+		struct drm_mode_set *set)
+{
+	if (sde_kms_cont_splash_blocks_set_config(crtc, set ? set->fb : NULL))
+		return -EBUSY;
+
+	return drm_atomic_helper_set_config(crtc, set);
+}
+
 static void sde_crtc_early_unregister(struct drm_crtc *crtc)
 {
 	_sde_crtc_destroy_debugfs(crtc);
 }
 
 static const struct drm_crtc_funcs sde_crtc_funcs = {
-	.set_config = drm_atomic_helper_set_config,
+	.set_config = sde_crtc_set_config,
 	.destroy = sde_crtc_destroy,
 	.page_flip = drm_atomic_helper_page_flip,
 	.atomic_set_property = sde_crtc_atomic_set_property,

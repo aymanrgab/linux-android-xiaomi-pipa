@@ -529,6 +529,43 @@ msm_alloc_stolen_fb(struct drm_device *dev, int w, int h, int p, uint32_t format
 	return fb;
 }
 
+struct drm_framebuffer *msm_alloc_cont_splash_fb(struct drm_device *dev,
+		int w, int h, int p, uint32_t format,
+		unsigned long paddr, size_t splash_size)
+{
+	struct drm_mode_fb_cmd2 mode_cmd = {
+		.pixel_format = format,
+		.width = w,
+		.height = h,
+		.pitches = { p },
+	};
+	struct drm_gem_object *bo;
+	struct drm_framebuffer *fb;
+	int size;
+
+	size = p * h;
+	if (size > splash_size)
+		size = splash_size;
+
+	bo = msm_gem_new_cont_splash(dev, paddr, size,
+			MSM_BO_SCANOUT | MSM_BO_WC);
+	if (IS_ERR(bo)) {
+		dev_err(dev->dev, "failed to wrap cont_splash memory: %ld\n",
+				PTR_ERR(bo));
+		return ERR_CAST(bo);
+	}
+
+	fb = msm_framebuffer_init(dev, &mode_cmd, &bo);
+	if (IS_ERR(fb)) {
+		dev_err(dev->dev, "failed to create cont_splash fb\n");
+		drm_gem_object_put_unlocked(bo);
+		return fb;
+	}
+
+	DRM_INFO("cont_splash fb0: %dx%d pitch %d @ %lx\n", w, h, p, paddr);
+	return fb;
+}
+
 int msm_fb_obj_get_attrs(struct drm_gem_object *obj, int *fb_ns,
 	 int *fb_sec, int *fb_sec_dir, unsigned long *flags)
 {

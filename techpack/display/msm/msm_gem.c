@@ -41,7 +41,26 @@ static dma_addr_t physaddr(struct drm_gem_object *obj)
 static bool use_pages(struct drm_gem_object *obj)
 {
 	struct msm_gem_object *msm_obj = to_msm_bo(obj);
-	return !msm_obj->vram_node;
+	return !msm_obj->vram_node && !(msm_obj->flags & MSM_BO_CONT_SPLASH);
+}
+
+/* Map reserved cont_splash pages (already on the live scanout pipe). */
+static struct page **get_pages_cont_splash(struct drm_gem_object *obj)
+{
+	struct msm_gem_object *msm_obj = to_msm_bo(obj);
+	unsigned long paddr = msm_obj->cont_splash_paddr;
+	int npages = obj->size >> PAGE_SHIFT;
+	struct page **p;
+	int i;
+
+	p = kvmalloc_array(npages, sizeof(struct page *), GFP_KERNEL);
+	if (!p)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < npages; i++)
+		p[i] = pfn_to_page((paddr >> PAGE_SHIFT) + i);
+
+	return p;
 }
 
 /* allocate pages from VRAM carveout, used when no IOMMU: */
@@ -87,7 +106,9 @@ static struct page **get_pages(struct drm_gem_object *obj)
 		struct page **p;
 		int npages = obj->size >> PAGE_SHIFT;
 
-		if (use_pages(obj))
+		if (msm_obj->flags & MSM_BO_CONT_SPLASH)
+			p = get_pages_cont_splash(obj);
+		else if (use_pages(obj))
 			p = drm_gem_get_pages(obj);
 		else
 			p = get_pages_vram(obj, npages);
@@ -145,10 +166,13 @@ static void put_pages(struct drm_gem_object *obj)
 			kfree(msm_obj->sgt);
 		}
 
-		if (use_pages(obj))
+		if (msm_obj->flags & MSM_BO_CONT_SPLASH) {
+			kvfree(msm_obj->pages);
+		} else if (use_pages(obj)) {
 			drm_gem_put_pages(obj, msm_obj->pages, true, false);
-		else
+		} else {
 			put_pages_vram(obj);
+		}
 
 		msm_obj->pages = NULL;
 	}
@@ -470,17 +494,21 @@ int msm_gem_get_iova(struct drm_gem_object *obj,
 			goto unlock;
 		}
 
-		pages = get_pages(obj);
-		if (IS_ERR(pages)) {
-			ret = PTR_ERR(pages);
-			goto fail;
-		}
+		if (msm_obj->flags & MSM_BO_CONT_SPLASH) {
+			vma->iova = msm_obj->cont_splash_paddr;
+		} else {
+			pages = get_pages(obj);
+			if (IS_ERR(pages)) {
+				ret = PTR_ERR(pages);
+				goto fail;
+			}
 
-		ret = msm_gem_map_vma(aspace, vma, msm_obj->sgt,
-				obj->size >> PAGE_SHIFT,
-				msm_obj->flags);
-		if (ret)
-			goto fail;
+			ret = msm_gem_map_vma(aspace, vma, msm_obj->sgt,
+					obj->size >> PAGE_SHIFT,
+					msm_obj->flags);
+			if (ret)
+				goto fail;
+		}
 	}
 
 	*iova = vma->iova;
@@ -1102,6 +1130,33 @@ struct drm_gem_object *msm_gem_new(struct drm_device *dev,
 		uint32_t size, uint32_t flags)
 {
 	return _msm_gem_new(dev, size, flags, false);
+}
+
+struct drm_gem_object *msm_gem_new_cont_splash(struct drm_device *dev,
+		unsigned long paddr, uint32_t size, uint32_t flags)
+{
+	struct drm_gem_object *obj = NULL;
+	int ret;
+
+	if (!paddr || !size)
+		return ERR_PTR(-EINVAL);
+
+	size = PAGE_ALIGN(size);
+	flags |= MSM_BO_CONT_SPLASH | MSM_BO_WC | MSM_BO_SCANOUT;
+
+	ret = msm_gem_new_impl(dev, size, flags, NULL, &obj, false);
+	if (ret)
+		return ERR_PTR(ret);
+
+	to_msm_bo(obj)->cont_splash_paddr = paddr;
+
+	ret = drm_gem_object_init(dev, obj, size);
+	if (ret) {
+		drm_gem_object_put_unlocked(obj);
+		return ERR_PTR(ret);
+	}
+
+	return obj;
 }
 
 int msm_gem_delayed_import(struct drm_gem_object *obj)

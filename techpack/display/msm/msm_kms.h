@@ -122,6 +122,9 @@ struct msm_kms_funcs {
 	int (*cont_splash_config)(struct msm_kms *kms);
 	/* check for continuous splash status */
 	bool (*check_for_splash)(struct msm_kms *kms, struct drm_crtc *crtc);
+	/* live splash framebuffer for fbdev / minui (no handoff) */
+	int (*get_cont_splash_fb)(struct msm_kms *kms,
+			struct msm_cont_splash_fb *info);
 	/* topology information */
 	int (*get_mixer_count)(const struct msm_kms *kms,
 			const struct drm_display_mode *mode,
@@ -136,6 +139,15 @@ struct msm_kms {
 
 	/* mapper-id used to request GEM buffer mapped for scanout: */
 	struct msm_gem_address_space *aspace;
+};
+
+/* Exposed during cont_splash: same memory the panel is scanning out */
+struct msm_cont_splash_fb {
+	bool valid;
+	struct drm_framebuffer *fb;
+	u32 width;
+	u32 height;
+	u32 pitch;
 };
 
 /**
