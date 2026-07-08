@@ -65,6 +65,13 @@
 
 #define TCSR_DISP_HF_SF_ARES_GLITCH_MASK        0x01FCA084
 
+static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
+		struct sde_splash_display *splash_display,
+		struct drm_crtc *crtc,
+		struct drm_display_mode *mode,
+		int idx);
+static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc);
+
 static const char * const iommu_ports[] = {
 		"mdp_0",
 };
@@ -2758,6 +2765,7 @@ static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
 {
 	struct sde_splash_mem *splash;
 	struct drm_device *dev;
+	struct drm_plane *plane;
 	u32 width, height, pitch, format;
 	struct drm_framebuffer *fb;
 
@@ -2782,9 +2790,13 @@ static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
 	if (IS_ERR(fb))
 		return PTR_ERR(fb);
 
+	plane = crtc->primary;
 	mutex_lock(&dev->mode_config.mutex);
-	crtc->state->fb = fb;
-	drm_framebuffer_get(fb);
+	if (plane) {
+		if (plane->state)
+			drm_atomic_set_fb_for_plane(plane->state, fb);
+		drm_framebuffer_assign(&plane->fb, fb);
+	}
 	mutex_unlock(&dev->mode_config.mutex);
 
 	sde_kms->cont_splash_fb[idx] = fb;
