@@ -37,7 +37,6 @@
 #include "sde_vbif.h"
 #include "sde_plane.h"
 #include "sde_color_processing.h"
-#include "sde_kms.h"
 
 #define SDE_DEBUG_PLANE(pl, fmt, ...) SDE_DEBUG("plane%d " fmt,\
 		(pl) ? (pl)->base.base.id : -1, ##__VA_ARGS__)
@@ -2551,18 +2550,11 @@ static int _sde_plane_validate_shared_crtc(struct sde_plane *psde,
 
 				if (splash_display->pipes[j].sspp ==
 						psde->pipe) {
-					if (sde_is_custom_client()) {
-						SDE_ERROR_PLANE(psde,
-						"pipe:%d used in cont-splash on crtc:%d\n",
-						psde->pipe,
-						splash_display->encoder->crtc ? splash_display->encoder->crtc->base.id : -1);
-						return -EINVAL;
-					} else {
-						/* Allow standard Linux clients to bypass this check */
-						SDE_DEBUG_PLANE(psde,
-						"pipe:%d used in cont-splash, allowing handoff\n",
-						psde->pipe);
-					}
+					SDE_ERROR_PLANE(psde,
+					"pipe:%d used in cont-splash on crtc:%d\n",
+					psde->pipe,
+					splash_display->encoder->crtc->base.id);
+					return -EINVAL;
 				}
 			}
 		}

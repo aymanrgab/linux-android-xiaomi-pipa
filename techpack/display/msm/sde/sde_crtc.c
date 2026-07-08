@@ -29,7 +29,6 @@
 #include <linux/clk/qcom.h>
 
 #include "sde_kms.h"
-#include "sde_hw_sspp.h"
 #include "sde_hw_lm.h"
 #include "sde_hw_ctl.h"
 #include "sde_crtc.h"
@@ -3365,46 +3364,6 @@ static void sde_crtc_atomic_flush(struct drm_crtc *crtc,
 
 	/* wait for acquire fences before anything else is done */
 	_sde_crtc_wait_for_fences(crtc);
-
-	/*
-	 * Ensure any planes left over from cont_splash get flushed and disabled
-	 * cleanly, even if Linux DRM doesn't know they are active and omits them
-	 * from the new atomic state.
-	 */
-	if (!sde_is_custom_client() && sde_kms && sde_kms->splash_data.num_splash_displays) {
-		int i, j, k;
-		for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
-			struct sde_splash_display *splash = &sde_kms->splash_data.splash_display[i];
-			if (splash->cont_splash_enabled && splash->encoder &&
-			    splash->encoder->crtc == crtc) {
-				for (j = 0; j < splash->pipe_cnt; j++) {
-					enum sde_sspp pipe_id = splash->pipes[j].sspp;
-					
-					for (k = 0; k < priv->num_planes; k++) {
-						struct drm_plane *p = priv->planes[k];
-						struct sde_plane *psde = to_sde_plane(p);
-						if (psde->pipe == pipe_id) {
-							if (psde->pipe_hw && psde->pipe_hw->ops.setup_rects) {
-								struct sde_hw_pipe_cfg pipe_cfg;
-								memset(&pipe_cfg, 0, sizeof(pipe_cfg));
-								psde->pipe_hw->ops.setup_rects(psde->pipe_hw,
-										&pipe_cfg,
-										splash->pipes[j].is_virtual ? SDE_SSPP_RECT_1 : SDE_SSPP_RECT_0);
-							}
-							break;
-						}
-					}
-
-					if (sde_crtc->mixers[0].hw_ctl &&
-					    sde_crtc->mixers[0].hw_ctl->ops.update_bitmask_sspp) {
-						sde_crtc->mixers[0].hw_ctl->ops.update_bitmask_sspp(
-							sde_crtc->mixers[0].hw_ctl,
-							pipe_id, true);
-					}
-				}
-			}
-		}
-	}
 
 	/* schedule the idle notify delayed work */
 	if ((g_panel->mi_cfg.panel_id != 0x4D38324100360200) &&
