@@ -2757,6 +2757,29 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms)
 	return rc;
 }
 
+static u32 sde_kms_splash_pitch(u32 width, u32 height, u32 splash_size)
+{
+	const struct drm_format_info *fmt;
+	u32 tight, aligned;
+
+	fmt = drm_format_info(DRM_FORMAT_ABGR8888);
+	tight = width * fmt->cpp[0];
+	aligned = align_pitch(width, 32);
+
+	if (height && !(splash_size % height)) {
+		u32 from_size = splash_size / height;
+
+		if (from_size >= tight && from_size <= aligned)
+			return from_size;
+	}
+
+	/*
+	 * Bootloader splash is usually tightly packed; adreno align is wider
+	 * and causes visible banding if userspace writes through the wrong pitch.
+	 */
+	return tight;
+}
+
 static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
 		struct sde_splash_display *splash_display,
 		struct drm_crtc *crtc,
@@ -2782,7 +2805,7 @@ static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
 	dev = sde_kms->dev;
 	width = mode->hdisplay;
 	height = mode->vdisplay;
-	pitch = align_pitch(width, 32);
+	pitch = sde_kms_splash_pitch(width, height, splash->splash_buf_size);
 	format = DRM_FORMAT_ABGR8888;
 
 	fb = msm_alloc_cont_splash_fb(dev, width, height, pitch, format,
@@ -2800,8 +2823,8 @@ static int sde_kms_setup_cont_splash_fb(struct sde_kms *sde_kms,
 	mutex_unlock(&dev->mode_config.mutex);
 
 	sde_kms->cont_splash_fb[idx] = fb;
-	DRM_INFO("pipa: cont_splash live fb on crtc %d (%dx%d)\n",
-			crtc->base.id, width, height);
+	DRM_INFO("pipa: cont_splash live fb on crtc %d (%dx%d pitch %d)\n",
+			crtc->base.id, width, height, pitch);
 
 	return 0;
 }

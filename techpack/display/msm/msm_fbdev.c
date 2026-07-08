@@ -77,8 +77,6 @@ static int msm_fbdev_create(struct drm_fb_helper *helper,
 	uint64_t paddr;
 	uint32_t format;
 	int ret, pitch;
-	bool use_cont_splash = false;
-	struct msm_cont_splash_fb cs = {0};
 
 	format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 		sizes->surface_depth);
@@ -87,28 +85,11 @@ static int msm_fbdev_create(struct drm_fb_helper *helper,
 			sizes->surface_height, sizes->surface_bpp,
 			sizes->fb_width, sizes->fb_height);
 
-	if (priv->kms && priv->kms->funcs &&
-	    priv->kms->funcs->get_cont_splash_fb) {
-		if (!priv->kms->funcs->get_cont_splash_fb(priv->kms, &cs) &&
-		    cs.valid && cs.fb) {
-			fb = cs.fb;
-			drm_framebuffer_get(fb);
-			bo = msm_framebuffer_bo(fb, 0);
-			pitch = cs.pitch;
-			use_cont_splash = true;
-			DRM_INFO("fbdev: using live cont_splash framebuffer\n");
-			mutex_lock(&dev->struct_mutex);
-			ret = msm_gem_get_iova(bo, priv->kms->aspace, &paddr);
-			if (ret) {
-				dev_err(dev->dev, "cont_splash iova failed: %d\n", ret);
-				mutex_unlock(&dev->struct_mutex);
-				drm_framebuffer_put(fb);
-				return ret;
-			}
-			goto setup_fbi;
-		}
-	}
-
+	/*
+	 * Never point fbcon at live cont_splash memory: fbcon clears the
+	 * console immediately and corrupts the bootloader scanout.  Plymouth
+	 * minui uses the DRM live-scanout path instead.
+	 */
 	pitch = align_pitch(sizes->surface_width, sizes->surface_bpp);
 	/* double buffer */
 	fb = msm_alloc_stolen_fb(dev, sizes->surface_width,
@@ -134,7 +115,6 @@ static int msm_fbdev_create(struct drm_fb_helper *helper,
 		goto fail_unlock;
 	}
 
-setup_fbi:
 	fbi = drm_fb_helper_alloc_fbi(helper);
 	if (IS_ERR(fbi)) {
 		dev_err(dev->dev, "failed to allocate fb info\n");
@@ -154,14 +134,6 @@ setup_fbi:
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->format->depth);
 	drm_fb_helper_fill_var(fbi, helper, sizes->fb_width, sizes->fb_height);
-
-	if (use_cont_splash) {
-		fbi->var.xres = cs.width;
-		fbi->var.yres = cs.height;
-		fbi->var.xres_virtual = cs.width;
-		fbi->var.yres_virtual = cs.height;
-		fbi->fix.line_length = cs.pitch;
-	}
 
 	dev->mode_config.fb_base = paddr;
 
@@ -183,10 +155,7 @@ setup_fbi:
 
 fail_unlock:
 	mutex_unlock(&dev->struct_mutex);
-	if (use_cont_splash)
-		drm_framebuffer_put(fb);
-	else
-		drm_framebuffer_remove(fb);
+	drm_framebuffer_remove(fb);
 	return ret;
 }
 
