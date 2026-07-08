@@ -3362,6 +3362,29 @@ static void sde_crtc_atomic_flush(struct drm_crtc *crtc,
 			sde_crtc->new_perf.llcc_active = true;
 	}
 
+	/*
+	 * Ensure any planes left over from cont_splash get flushed and disabled
+	 * cleanly, even if Linux DRM doesn't know they are active and omits them
+	 * from the new atomic state.
+	 */
+	if (!sde_is_custom_client() && sde_kms && sde_kms->splash_data.num_splash_displays) {
+		int i, j;
+		for (i = 0; i < MAX_DSI_DISPLAYS; i++) {
+			struct sde_splash_display *splash = &sde_kms->splash_data.splash_display[i];
+			if (splash->cont_splash_enabled && splash->encoder &&
+			    splash->encoder->crtc == crtc) {
+				for (j = 0; j < splash->pipe_cnt; j++) {
+					if (sde_crtc->mixers[0].hw_ctl &&
+					    sde_crtc->mixers[0].hw_ctl->ops.update_bitmask_sspp) {
+						sde_crtc->mixers[0].hw_ctl->ops.update_bitmask_sspp(
+							sde_crtc->mixers[0].hw_ctl,
+							splash->pipes[j].sspp, true);
+					}
+				}
+			}
+		}
+	}
+
 	/* wait for acquire fences before anything else is done */
 	_sde_crtc_wait_for_fences(crtc);
 
