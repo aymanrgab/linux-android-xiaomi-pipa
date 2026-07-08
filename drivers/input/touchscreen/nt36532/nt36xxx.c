@@ -1271,9 +1271,6 @@ static void release_touch_event(void) {
 		input_mt_sync(ts->input_dev);
 #endif
 		input_sync(ts->input_dev);
-
-		if (ts->key_helper_dev)
-			ts->key_helper_active = false;
 	}
 }
 
@@ -1961,34 +1958,10 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 
 	input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0));
-
-	/* key helper: report KEY_ENTER on touch for boot splash */
-	if (ts->key_helper_dev) {
-		if ((finger_cnt > 0) && !ts->key_helper_active) {
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 1);
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 0);
-			input_sync(ts->key_helper_dev);
-			ts->key_helper_active = true;
-		} else if ((finger_cnt == 0) && ts->key_helper_active) {
-			ts->key_helper_active = false;
-		}
-	}
 #else /* MT_PROTOCOL_B */
 	if (finger_cnt == 0) {
 		input_report_key(ts->input_dev, BTN_TOUCH, 0);
 		input_mt_sync(ts->input_dev);
-	}
-
-	/* key helper: report KEY_ENTER on touch for boot splash */
-	if (ts->key_helper_dev) {
-		if ((finger_cnt > 0) && !ts->key_helper_active) {
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 1);
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 0);
-			input_sync(ts->key_helper_dev);
-			ts->key_helper_active = true;
-		} else if ((finger_cnt == 0) && ts->key_helper_active) {
-			ts->key_helper_active = false;
-		}
 	}
 #endif /* MT_PROTOCOL_B */
 
@@ -3154,27 +3127,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_input_register_device_failed;
 	}
 
-	//---create key helper device for boot splash touch handling---
-	ts->key_helper_dev = input_allocate_device();
-	if (ts->key_helper_dev) {
-		ts->key_helper_dev->name = "nt36xxx-key-helper";
-		ts->key_helper_dev->phys = "input/key_helper";
-		ts->key_helper_dev->id.bustype = BUS_SPI;
-		ts->key_helper_dev->dev.parent = &ts->client->dev;
-		set_bit(EV_KEY, ts->key_helper_dev->evbit);
-		set_bit(KEY_ENTER, ts->key_helper_dev->keybit);
-		set_bit(EV_SYN, ts->key_helper_dev->evbit);
-
-		ret = input_register_device(ts->key_helper_dev);
-		if (ret) {
-			NVT_ERR("register key helper device failed. ret=%d\n", ret);
-			input_free_device(ts->key_helper_dev);
-			ts->key_helper_dev = NULL;
-		}
-	} else {
-		NVT_ERR("allocate key helper device failed\n");
-	}
-
 	if (ts->pen_support) {
 		//---allocate pen input device---
 		ts->pen_input_dev = input_allocate_device();
@@ -3609,11 +3561,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 
 	nvt_gpio_deconfig(ts);
 
-	if (ts->key_helper_dev) {
-		input_unregister_device(ts->key_helper_dev);
-		ts->key_helper_dev = NULL;
-	}
-
 	if (ts->pen_support) {
 		if (ts->pen_input_dev) {
 			input_unregister_device(ts->pen_input_dev);
@@ -3807,9 +3754,6 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	input_mt_sync(ts->input_dev);
 #endif
 	input_sync(ts->input_dev);
-
-	if (ts->key_helper_dev)
-		ts->key_helper_active = false;
 
 	/* release pen event */
 	if (ts->pen_support) {
