@@ -2872,6 +2872,14 @@ bool sde_kms_cont_splash_blocks_set_config(struct drm_crtc *crtc,
 		return false;
 
 	sde_kms = to_sde_kms(priv->kms);
+	/*
+	 * DPMS/blank/restore paths often call into ->set_config() with
+	 * new_fb == NULL. Do not block these legacy transitions, otherwise
+	 * fbdev restore can leave the plane state inconsistent while
+	 * cont_splash is active.
+	 */
+	if (!new_fb)
+		return false;
 	if (!sde_kms_check_for_splash(priv->kms, crtc))
 		return false;
 
