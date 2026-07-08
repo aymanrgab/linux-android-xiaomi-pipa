@@ -43,6 +43,15 @@
 /* Request to switch the bit clk */
 #define MSM_MODE_FLAG_SEAMLESS_DYN_CLK			(1<<5)
 
+/* Exposed during cont_splash: same memory the panel is scanning out */
+struct msm_cont_splash_fb {
+	bool valid;
+	struct drm_framebuffer *fb;
+	u32 width;
+	u32 height;
+	u32 pitch;
+};
+
 /* As there are different display controller blocks depending on the
  * snapdragon version, the kms support is split out and the appropriate
  * implementation is loaded at runtime.  The kms module is responsible
@@ -139,15 +148,6 @@ struct msm_kms {
 
 	/* mapper-id used to request GEM buffer mapped for scanout: */
 	struct msm_gem_address_space *aspace;
-};
-
-/* Exposed during cont_splash: same memory the panel is scanning out */
-struct msm_cont_splash_fb {
-	bool valid;
-	struct drm_framebuffer *fb;
-	u32 width;
-	u32 height;
-	u32 pitch;
 };
 
 /**

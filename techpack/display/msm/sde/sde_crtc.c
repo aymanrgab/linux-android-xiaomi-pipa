@@ -6392,13 +6392,14 @@ static int sde_crtc_late_register(struct drm_crtc *crtc)
 	return _sde_crtc_init_debugfs(crtc);
 }
 
-static int sde_crtc_set_config(struct drm_crtc *crtc,
-		struct drm_mode_set *set)
+static int sde_crtc_set_config(struct drm_mode_set *set,
+		struct drm_modeset_acquire_ctx *ctx)
 {
-	if (sde_kms_cont_splash_blocks_set_config(crtc, set ? set->fb : NULL))
+	if (set && set->crtc &&
+	    sde_kms_cont_splash_blocks_set_config(set->crtc, set->fb))
 		return -EBUSY;
 
-	return drm_atomic_helper_set_config(crtc, set);
+	return drm_atomic_helper_set_config(set, ctx);
 }
 
 static void sde_crtc_early_unregister(struct drm_crtc *crtc)
