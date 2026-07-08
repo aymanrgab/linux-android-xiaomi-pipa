@@ -336,9 +336,14 @@ static void dsi_bridge_disable(struct drm_bridge *bridge)
 		power_mode = MI_DRM_BLANK_POWERDOWN;
 	}
 
-	notify_data.data = &power_mode;
-	notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
-	mi_drm_notifier_call_chain(MI_DRM_PRE_EVENT_BLANK, &notify_data);
+	/* During continuous splash the panel stays on; do not suspend
+	 * touch on spurious bridge disable (e.g. fbdev blank/restore).
+	 */
+	if (!c_bridge->display->is_cont_splash_enabled) {
+		notify_data.data = &power_mode;
+		notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
+		mi_drm_notifier_call_chain(MI_DRM_PRE_EVENT_BLANK, &notify_data);
+	}
 
 	display = c_bridge->display;
 	private_flags =
@@ -395,9 +400,11 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 		power_mode = MI_DRM_BLANK_POWERDOWN;
 	}
 
-	notify_data.data = &power_mode;
-	notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
-	mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
+	if (!c_bridge->display->is_cont_splash_enabled) {
+		notify_data.data = &power_mode;
+		notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
+		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
+	}
 
 	SDE_ATRACE_BEGIN("dsi_bridge_post_disable");
 	SDE_ATRACE_BEGIN("dsi_display_disable");
@@ -418,7 +425,8 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 		return;
 	}
 
-	mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
+	if (!c_bridge->display->is_cont_splash_enabled)
+		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
 	SDE_ATRACE_END("dsi_bridge_post_disable");
 	if (c_bridge->display->is_prim_display)
 		atomic_set(&prim_panel_is_on, false);

@@ -4969,6 +4969,20 @@ int dsi_display_cont_splash_config(void *dsi_display)
 	dsi_config_host_engine_state_for_cont_splash(display);
 	mutex_unlock(&display->display_lock);
 
+	/* Panel is already scanning out from the bootloader splash.
+	 * Notify touch (and other display clients) that the panel is
+	 * on now, instead of waiting for the first DRM modeset.
+	 */
+	if (display->is_prim_display) {
+		struct mi_drm_notifier notify_data;
+		int power_mode = MI_DRM_BLANK_UNBLANK;
+
+		notify_data.data = &power_mode;
+		notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
+		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
+		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
+	}
+
 	/* Set the current brightness level */
 	dsi_panel_bl_handoff(display->panel);
 
