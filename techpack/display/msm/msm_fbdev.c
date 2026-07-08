@@ -182,9 +182,6 @@ setup_fbi:
 	fbi->fix.smem_start = paddr;
 	fbi->fix.smem_len = bo->size;
 
-	if (use_cont_splash)
-		memset(fbi->screen_base, 0, bo->size);
-
 	DBG("par=%p, %dx%d", fbi->par, fbi->var.xres, fbi->var.yres);
 	DBG("allocated %dx%d fb", fbdev->fb->width, fbdev->fb->height);
 

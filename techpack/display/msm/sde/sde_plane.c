@@ -2550,18 +2550,11 @@ static int _sde_plane_validate_shared_crtc(struct sde_plane *psde,
 
 				if (splash_display->pipes[j].sspp ==
 						psde->pipe) {
-					if (sde_is_custom_client()) {
-						SDE_ERROR_PLANE(psde,
-						"pipe:%d used in cont-splash on crtc:%d\n",
-						psde->pipe,
-						splash_display->encoder->crtc->base.id);
-						return -EINVAL;
-					} else {
-						SDE_DEBUG_PLANE(psde,
-						"pipe:%d used in cont-splash on crtc:%d, allowing for handoff\n",
-						psde->pipe,
-						splash_display->encoder->crtc->base.id);
-					}
+					SDE_ERROR_PLANE(psde,
+					"pipe:%d used in cont-splash on crtc:%d\n",
+					psde->pipe,
+					splash_display->encoder->crtc->base.id);
+					return -EINVAL;
 				}
 			}
 		}
