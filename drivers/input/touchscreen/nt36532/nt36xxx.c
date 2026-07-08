@@ -1216,6 +1216,19 @@ void nvt_ts_pen_gesture_report(uint8_t pen_gesture_id)
 }
 #endif
 
+void nvt_ts_boot_fw_complete(void)
+{
+	bTouchIsAwake = 1;
+	nvt_irq_enable(true);
+	NVT_LOG("boot firmware ready, touch active\n");
+}
+
+void nvt_ts_boot_fw_failed(void)
+{
+	NVT_ERR("boot firmware update failed, enabling touch anyway\n");
+	nvt_ts_boot_fw_complete();
+}
+
 int switch_pen_input_device(void) {
 	uint8_t buf[8] = {0};
 	int32_t ret = 0;
@@ -1433,12 +1446,18 @@ static int32_t nvt_parse_dt(struct device *dev)
 
 static int nvt_get_panel_type(struct nvt_ts_data *ts_data)
 {
-	int i;
+	int i = 2;
 	int j;
 	u8 *lockdown = ts_data->lockdown_info;
 	struct nvt_config_info *panel_list = ts->config_array;
 
-	for (j = 0; j < 60; j++) {
+	if (is_lockdown_empty(lockdown)) {
+		NVT_LOG("lockdown empty, use default fw\n");
+		ts->panel_index = -EINVAL;
+		return -EINVAL;
+	}
+
+	for (j = 0; j < 10; j++) {
 		if (lockdown[1] == 0x42) {
 			i = 0;
 			break;
@@ -1448,6 +1467,8 @@ static int nvt_get_panel_type(struct nvt_ts_data *ts_data)
 			break;
 		}
 
+		if (j == 0)
+			break;
 		mdelay(100);
 	}
 	if (i != 0 && i != 1){
@@ -1485,8 +1506,14 @@ bool is_lockdown_empty(u8 *lockdown)
 void nvt_match_fw(void)
 {
 	NVT_LOG("start match fw name");
-	if (is_lockdown_empty(ts->lockdown_info)){
+	if (is_lockdown_empty(ts->lockdown_info)) {
 		flush_delayed_work(&ts->nvt_lockdown_work);
+		if (is_lockdown_empty(ts->lockdown_info)) {
+			NVT_LOG("lockdown unavailable, use default fw\n");
+			ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
+			ts->mp_name = MP_UPDATE_FIRMWARE_NAME;
+			return;
+		}
 	}
 	if (nvt_get_panel_type(ts) < 0) {
 		ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
@@ -3115,9 +3142,13 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #if NVT_SUPER_RESOLUTION_N
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
+	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_X, ts->abs_x_max * NVT_SUPER_RESOLUTION_N);
+	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_Y, ts->abs_y_max * NVT_SUPER_RESOLUTION_N);
 #else /* #if NVT_SUPER_RESOLUTION_N */
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
+	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_X, ts->abs_x_max);
+	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_Y, ts->abs_y_max);
 #endif /* #if NVT_SUPER_RESOLUTION_N */
 #if MT_PROTOCOL_B
 	// no need to set ABS_MT_TRACKING_ID, input_mt_init_slots() already set it
@@ -3225,6 +3256,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 			NVT_ERR("register pen input device (%s) failed. ret=%d\n", ts->pen_input_dev->name, ret);
 			goto err_pen_input_register_device_failed;
 		}
+		input_disable_device(ts->pen_input_dev);
 	} /* if (ts->pen_support) */
 
 	//---set int-pin & request irq---
@@ -3276,7 +3308,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
 	// please make sure boot update start after display reset(RESX) sequence, usually ts driver probs after reset is done
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(100));
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(0));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
@@ -3405,10 +3437,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 #endif
 
-	bTouchIsAwake = 1;
-	NVT_LOG("end\n");
-
-	nvt_irq_enable(true);
+	bTouchIsAwake = 0;
+	NVT_LOG("end (awaiting boot firmware update)\n");
 
 	return 0;
 

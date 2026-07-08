@@ -872,18 +872,28 @@ return:
 *******************************************************/
 void Boot_Update_Firmware(struct work_struct *work)
 {
+	int ret;
+
 	nvt_match_fw();
 	mutex_lock(&ts->lock);
 	if (nvt_get_dbgfw_status()) {
 		if (nvt_update_firmware(DEFAULT_DEBUG_FW_NAME) < 0) {
 			NVT_ERR("use built-in fw");
-			nvt_update_firmware(ts->fw_name);
+			ret = nvt_update_firmware(ts->fw_name);
+		} else {
+			ret = 0;
 		}
 	} else {
-		nvt_update_firmware(ts->fw_name);
+		ret = nvt_update_firmware(ts->fw_name);
+	}
+	if (ret < 0) {
+		mutex_unlock(&ts->lock);
+		nvt_ts_boot_fw_failed();
+		return;
 	}
 	nvt_get_fw_info();
 	mutex_unlock(&ts->lock);
 	switch_pen_input_device();
+	nvt_ts_boot_fw_complete();
 }
 #endif /* BOOT_UPDATE_FIRMWARE */

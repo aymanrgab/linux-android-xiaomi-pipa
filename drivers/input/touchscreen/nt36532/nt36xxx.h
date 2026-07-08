@@ -316,4 +316,6 @@ bool nvt_get_dbgfw_status(void);
 extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 int switch_pen_input_device(void);
+void nvt_ts_boot_fw_complete(void);
+void nvt_ts_boot_fw_failed(void);
 #endif /* _LINUX_NVT_TOUCH_H */
