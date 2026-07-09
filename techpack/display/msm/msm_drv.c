@@ -51,7 +51,6 @@
 #include "msm_mmu.h"
 #include "sde_wb.h"
 #include "sde_dbg.h"
-#include "dsi/dsi_panel_mi.h"
 
 /*
  * MSM driver version:
@@ -1178,6 +1177,9 @@ static void msm_lastclose(struct drm_device *dev)
 	struct drm_modeset_acquire_ctx ctx;
 	int i, rc;
 
+	if (priv->shutdown_in_progress)
+		return;
+
 	/* check for splash status before triggering cleanup
 	 * if we end up here with splash status ON i.e before first
 	 * commit then ignore the last close call. Also, ignore
@@ -1202,7 +1204,7 @@ static void msm_lastclose(struct drm_device *dev)
 	flush_workqueue(priv->wq);
 
 	if (priv->fbdev) {
-		if (!priv->shutdown_in_progress)
+		if (!priv->fbdev_cont_splash && !priv->shutdown_in_progress)
 			drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
 		return;
 	}
@@ -2227,10 +2229,6 @@ static void msm_pdev_shutdown(struct platform_device *pdev)
 	}
 
 	priv->shutdown_in_progress = true;
-
-	dsi_panel_power_turn_off(false);
-
-	msm_lastclose(ddev);
 }
 
 static const struct of_device_id dt_match[] = {

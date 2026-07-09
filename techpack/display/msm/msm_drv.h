@@ -715,6 +715,9 @@ struct msm_drm_private {
 	/* update the flag when msm driver receives shutdown notification */
 	bool shutdown_in_progress;
 
+	/* fbdev mirrors live cont_splash scanout; modeset restore is unsafe */
+	bool fbdev_cont_splash;
+
 	struct msm_idle idle;
 };
 

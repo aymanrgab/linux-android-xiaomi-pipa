@@ -155,6 +155,9 @@ setup_fbi:
 	fbdev->fb = fb;
 	helper->fb = fb;
 
+	if (use_cont_splash)
+		priv->fbdev_cont_splash = true;
+
 	fbi->par = helper;
 	fbi->fbops = &msm_fb_ops;
 
