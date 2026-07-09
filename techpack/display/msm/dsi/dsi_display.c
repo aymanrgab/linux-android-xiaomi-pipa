@@ -1115,13 +1115,8 @@ int dsi_display_set_power(struct drm_connector *connector,
 	DSI_DEBUG("Power mode transition from %d to %d %s",
 			display->panel->power_mode, power_mode,
 			rc ? "failed" : "successful");
-	if (!rc) {
+	if (!rc)
 		display->panel->power_mode = power_mode;
-		if (display->is_prim_display && !display->is_cont_splash_enabled &&
-		    (power_mode == SDE_MODE_DPMS_LP1 ||
-		     power_mode == SDE_MODE_DPMS_LP2))
-			dsi_drm_prim_panel_mark_off();
-	}
 
 	return rc;
 }

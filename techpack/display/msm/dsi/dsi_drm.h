@@ -149,7 +149,4 @@ u64 dsi_drm_find_bit_clk_rate(void *display,
 int dsi_conn_prepare_commit(void *display,
 		struct msm_display_conn_params *params);
 
-/* Clear FPC state after deep panel power-off (e.g. keyboard suspend path). */
-void dsi_drm_prim_panel_mark_off(void);
-
 #endif /* _DSI_DRM_H_ */
