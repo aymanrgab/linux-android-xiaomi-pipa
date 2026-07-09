@@ -21,12 +21,68 @@ _pipa_log_fb_state() {
 	[ -c /dev/graphics/fb0 ] && _pipa_kmsg "  /dev/graphics/fb0 present" || _pipa_kmsg "  /dev/graphics/fb0 missing"
 }
 
+_pipa_find_persist() {
+	for cand in \
+		/dev/block/sda22 \
+		/dev/block/by-name/persist \
+		/dev/disk/by-partlabel/persist \
+		/dev/block/bootdevice/by-name/persist; do
+		[ -e "$cand" ] && { echo "$cand"; return 0; }
+	done
+	return 1
+}
+
+# Write initrd diagnostics to persist (sda22 on pipa) for recovery readback.
+_pipa_dump_log() {
+	dev="$(_pipa_find_persist)" || { _pipa_kmsg "persist not found, skip log dump"; return 1; }
+
+	mkdir -p /pipa-persist 2>/dev/null || return 1
+	if ! mount -t ext4 -o rw "$dev" /pipa-persist 2>/dev/null; then
+		_pipa_kmsg "persist mount failed ($dev)"
+		return 1
+	fi
+
+	log=/pipa-persist/pipa-initrd.log
+	{
+		echo "===== pipa initrd log ====="
+		echo "--- persist device: $dev ---"
+		echo "--- /proc/cmdline ---"
+		cat /proc/cmdline 2>/dev/null
+		echo
+		echo "--- input devices ---"
+		for namepath in /sys/class/input/event*/device/name; do
+			[ -f "$namepath" ] || continue
+			evname="$(basename "$(dirname "$(dirname "$namepath")")")"
+			echo "  $evname: $(cat "$namepath" 2>/dev/null)"
+		done
+		echo
+		echo "--- /dev/input ---"
+		ls -l /dev/input 2>/dev/null
+		echo
+		echo "--- framebuffer ---"
+		for fb in /sys/class/graphics/fb*; do
+			[ -d "$fb" ] || continue
+			echo "  $(basename "$fb"): virtual_size=$(cat "$fb/virtual_size" 2>/dev/null) blank=$(cat "$fb/blank" 2>/dev/null)"
+		done
+		ls -l /dev/fb0 /dev/graphics/fb0 2>/dev/null
+		echo
+		echo "--- dmesg (touch/NVT/initrd) ---"
+		dmesg 2>/dev/null | grep -iE 'initrd|pipa|NVT|touch|unl0kr|libinput|input|fb0|firmware ready' || true
+		echo
+		echo "--- dmesg (full) ---"
+		dmesg 2>/dev/null
+	} > "$log" 2>&1
+	sync
+	umount /pipa-persist 2>/dev/null || true
+	_pipa_kmsg "wrote $log on $dev"
+}
+
 _pipa_find_touch_event() {
 	for namepath in /sys/class/input/event*/device/name; do
 		[ -f "$namepath" ] || continue
 		name="$(cat "$namepath" 2>/dev/null)" || continue
 		case "$name" in
-		NVTCapacitiveTouchScreen|NVT-ts|nt36xxx-key-helper)
+		NVTCapacitiveTouchScreen|NVT-ts)
 			evname="$(basename "$(dirname "$(dirname "$namepath")")")"
 			if [ -c "/dev/input/$evname" ]; then
 				echo "/dev/input/$evname $name"
@@ -62,9 +118,6 @@ _pipa_wait_for_nvt_ready() {
 		if dmesg 2>/dev/null | grep -q 'boot firmware ready, touch active'; then
 			return 0
 		fi
-		if _pipa_find_touch_event >/dev/null 2>&1; then
-			return 0
-		fi
 		sleep 0.1
 		i=$((i + 1))
 	done
@@ -73,18 +126,12 @@ _pipa_wait_for_nvt_ready() {
 }
 
 _pipa_wake_display() {
-	for blank in /sys/class/graphics/fb*/blank; do
-		[ -w "$blank" ] || continue
-		echo 0 > "$blank" 2>/dev/null || true
-	done
-
 	if [ -e /dev/graphics/fb0 ] && [ ! -e /dev/fb0 ]; then
 		ln -sf /dev/graphics/fb0 /dev/fb0 2>/dev/null || true
 	fi
 
-	if [ -w /dev/fb0 ]; then
-		# Best-effort unblank for fbdev/unl0kr; ignore if unsupported.
-		true
+	if [ -c /dev/fb0 ]; then
+		chmod 666 /dev/fb0 2>/dev/null || true
 	fi
 }
 
@@ -124,6 +171,7 @@ halium_hook_setup_touchscreen() {
 	fi
 
 	_pipa_log_fb_state
+	_pipa_dump_log
 }
 
 halium_hook_teardown_touchscreen() {

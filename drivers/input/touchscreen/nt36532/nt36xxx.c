@@ -1547,9 +1547,11 @@ void nvt_match_fw(void)
 {
 	NVT_LOG("start match fw name");
 	if (is_lockdown_empty(ts->lockdown_info)) {
-		flush_delayed_work(&ts->nvt_lockdown_work);
-		if (is_lockdown_empty(ts->lockdown_info)) {
-			NVT_LOG("lockdown unavailable, use default fw\n");
+		if (!ts->lkdown_readed) {
+			/* Do not flush lockdown work here: dsi_panel_lockdown_info_read()
+			 * can block during initramfs/cont_splash and stall boot FW update.
+			 */
+			NVT_LOG("lockdown not ready, use default fw\n");
 			ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
 			ts->mp_name = MP_UPDATE_FIRMWARE_NAME;
 			return;
