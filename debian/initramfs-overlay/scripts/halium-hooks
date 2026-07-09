@@ -4,112 +4,6 @@ _pipa_kmsg() {
 	echo "initrd: pipa: $1" >/dev/kmsg 2>/dev/null || true
 }
 
-_pipa_log_input_devices() {
-	for namepath in /sys/class/input/event*/device/name; do
-		[ -f "$namepath" ] || continue
-		evname="$(basename "$(dirname "$(dirname "$namepath")")")"
-		_pipa_kmsg "  input $evname: $(cat "$namepath" 2>/dev/null)"
-	done
-}
-
-_pipa_log_fb_state() {
-	for fb in /sys/class/graphics/fb*; do
-		[ -d "$fb" ] || continue
-		_pipa_kmsg "  $(basename "$fb"): virtual_size=$(cat "$fb/virtual_size" 2>/dev/null) blank=$(cat "$fb/blank" 2>/dev/null)"
-	done
-	[ -c /dev/fb0 ] && _pipa_kmsg "  /dev/fb0 present" || _pipa_kmsg "  /dev/fb0 missing"
-	[ -c /dev/graphics/fb0 ] && _pipa_kmsg "  /dev/graphics/fb0 present" || _pipa_kmsg "  /dev/graphics/fb0 missing"
-}
-
-_pipa_find_persist() {
-	for cand in \
-		/dev/block/sda22 \
-		/dev/block/by-name/persist \
-		/dev/disk/by-partlabel/persist \
-		/dev/block/bootdevice/by-name/persist; do
-		[ -e "$cand" ] && { echo "$cand"; return 0; }
-	done
-	return 1
-}
-
-# Write initrd diagnostics to persist (sda22 on pipa) for recovery readback.
-_pipa_dump_log() {
-	dev="$(_pipa_find_persist)" || { _pipa_kmsg "persist not found, skip log dump"; return 1; }
-
-	mkdir -p /pipa-persist 2>/dev/null || return 1
-	if ! mount -t ext4 -o rw "$dev" /pipa-persist 2>/dev/null; then
-		_pipa_kmsg "persist mount failed ($dev)"
-		return 1
-	fi
-
-	log=/pipa-persist/pipa-initrd.log
-	{
-		echo "===== pipa initrd log ====="
-		echo "--- persist device: $dev ---"
-		echo "--- /proc/cmdline ---"
-		cat /proc/cmdline 2>/dev/null
-		echo
-		echo "--- input devices ---"
-		for namepath in /sys/class/input/event*/device/name; do
-			[ -f "$namepath" ] || continue
-			evname="$(basename "$(dirname "$(dirname "$namepath")")")"
-			echo "  $evname: $(cat "$namepath" 2>/dev/null)"
-		done
-		echo
-		echo "--- /dev/input ---"
-		ls -l /dev/input 2>/dev/null
-		echo
-		echo "--- framebuffer ---"
-		for fb in /sys/class/graphics/fb*; do
-			[ -d "$fb" ] || continue
-			echo "  $(basename "$fb"): virtual_size=$(cat "$fb/virtual_size" 2>/dev/null) blank=$(cat "$fb/blank" 2>/dev/null)"
-		done
-		ls -l /dev/fb0 /dev/graphics/fb0 2>/dev/null
-		echo
-		echo "--- dmesg (touch/NVT/initrd) ---"
-		dmesg 2>/dev/null | grep -iE 'initrd|pipa|NVT|touch|unl0kr|libinput|input|fb0|firmware ready' || true
-		echo
-		echo "--- dmesg (full) ---"
-		dmesg 2>/dev/null
-	} > "$log" 2>&1
-	sync
-	umount /pipa-persist 2>/dev/null || true
-	_pipa_kmsg "wrote $log on $dev"
-}
-
-_pipa_find_touch_event() {
-	for namepath in /sys/class/input/event*/device/name; do
-		[ -f "$namepath" ] || continue
-		name="$(cat "$namepath" 2>/dev/null)" || continue
-		case "$name" in
-		NVTCapacitiveTouchScreen|NVT-ts)
-			evname="$(basename "$(dirname "$(dirname "$namepath")")")"
-			if [ -c "/dev/input/$evname" ]; then
-				echo "/dev/input/$evname $name"
-				return 0
-			fi
-			;;
-		esac
-	done
-	return 1
-}
-
-_pipa_wait_for_touch_event() {
-	max_wait="${1:-300}"
-	i=0
-
-	while [ "$i" -lt "$max_wait" ]; do
-		if touch="$(_pipa_find_touch_event)"; then
-			echo "$touch"
-			return 0
-		fi
-		sleep 0.1
-		i=$((i + 1))
-	done
-
-	return 1
-}
-
 _pipa_wait_for_nvt_ready() {
 	max_wait="${1:-300}"
 	i=0
@@ -125,18 +19,8 @@ _pipa_wait_for_nvt_ready() {
 	return 1
 }
 
-_pipa_wake_display() {
-	if [ -e /dev/graphics/fb0 ] && [ ! -e /dev/fb0 ]; then
-		ln -sf /dev/graphics/fb0 /dev/fb0 2>/dev/null || true
-	fi
-
-	if [ -c /dev/fb0 ]; then
-		chmod 666 /dev/fb0 2>/dev/null || true
-	fi
-}
-
 _pipa_ensure_input_nodes() {
-	mkdir -p /dev/input /dev/graphics 2>/dev/null || true
+	mkdir -p /dev/input 2>/dev/null || true
 
 	if command -v udevadm >/dev/null 2>&1; then
 		udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
@@ -152,26 +36,15 @@ _pipa_ensure_input_nodes() {
 halium_hook_setup_touchscreen() {
 	_pipa_kmsg "preparing touchscreen for unl0kr"
 
-	_pipa_wake_display
 	_pipa_ensure_input_nodes
 
 	if _pipa_wait_for_nvt_ready 300; then
-		_pipa_kmsg "NT36532 boot firmware / touch ready"
+		_pipa_kmsg "NT36532 touch ready"
 	else
 		_pipa_kmsg "NT36532 wait timed out, continuing"
 	fi
 
 	_pipa_ensure_input_nodes
-
-	if touch="$(_pipa_wait_for_touch_event 300)"; then
-		_pipa_kmsg "touch event ready: $touch"
-	else
-		_pipa_kmsg "touch event node missing; listing input devices:"
-		_pipa_log_input_devices
-	fi
-
-	_pipa_log_fb_state
-	_pipa_dump_log
 }
 
 halium_hook_teardown_touchscreen() {

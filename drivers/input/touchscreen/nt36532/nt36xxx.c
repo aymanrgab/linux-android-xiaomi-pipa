@@ -3184,18 +3184,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #if NVT_SUPER_RESOLUTION_N
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
-	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_X, ts->abs_x_max * NVT_SUPER_RESOLUTION_N);
-	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_Y, ts->abs_y_max * NVT_SUPER_RESOLUTION_N);
 #else /* #if NVT_SUPER_RESOLUTION_N */
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
-	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_X, ts->abs_x_max);
-	input_abs_set_res(ts->input_dev, ABS_MT_POSITION_Y, ts->abs_y_max);
 #endif /* #if NVT_SUPER_RESOLUTION_N */
-	input_set_abs_params(ts->input_dev, ABS_X, 0, ts->abs_x_max - 1, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_Y, 0, ts->abs_y_max - 1, 0, 0);
-	input_abs_set_res(ts->input_dev, ABS_X, ts->abs_x_max);
-	input_abs_set_res(ts->input_dev, ABS_Y, ts->abs_y_max);
 #if MT_PROTOCOL_B
 	// no need to set ABS_MT_TRACKING_ID, input_mt_init_slots() already set it
 #else
