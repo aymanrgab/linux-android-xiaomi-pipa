@@ -1480,21 +1480,22 @@ bool is_lockdown_empty(u8 *lockdown)
 	return ret;
 }
 
-void nvt_sync_input_abs_params(void)
+static int nvt_get_panel_type_from_cmdline(void)
 {
-	if (!ts || !ts->input_dev)
-		return;
+	char *cmd = saved_command_line;
 
-#if NVT_SUPER_RESOLUTION_N
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0,
-			     ts->abs_x_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0,
-			     ts->abs_y_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
-#else
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
-#endif
-	NVT_LOG("touch abs %ux%u\n", ts->abs_x_max, ts->abs_y_max);
+	if (!cmd)
+		return -EINVAL;
+
+	if (strnstr(cmd, "m82_42", strlen(cmd)) ||
+	    strnstr(cmd, "dsi_m82_42", strlen(cmd)))
+		return 0;
+
+	if (strnstr(cmd, "m82_36", strlen(cmd)) ||
+	    strnstr(cmd, "dsi_m82_36", strlen(cmd)))
+		return 1;
+
+	return -EINVAL;
 }
 
 static void nvt_panel_fw_correct_work_fn(struct work_struct *work)
@@ -1519,8 +1520,6 @@ static void nvt_panel_fw_correct_work_fn(struct work_struct *work)
 	if (ret >= 0)
 		nvt_get_fw_info();
 	mutex_unlock(&ts->lock);
-	if (ret >= 0)
-		nvt_sync_input_abs_params();
 	switch_pen_input_device();
 }
 
@@ -1529,6 +1528,16 @@ void nvt_match_fw(void)
 	NVT_LOG("start match fw name");
 	if (is_lockdown_empty(ts->lockdown_info)) {
 		if (!ts->lkdown_readed) {
+			int idx = nvt_get_panel_type_from_cmdline();
+
+			if (idx >= 0 && idx < ts->config_array_size) {
+				ts->panel_index = idx;
+				ts->fw_name = ts->config_array[idx].nvt_fw_name;
+				ts->mp_name = ts->config_array[idx].nvt_mp_name;
+				NVT_LOG("lockdown not ready, cmdline panel fw [%s]\n",
+					ts->fw_name);
+				return;
+			}
 			NVT_LOG("lockdown not ready, use default fw\n");
 			ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
 			ts->mp_name = MP_UPDATE_FIRMWARE_NAME;
@@ -3271,8 +3280,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 	INIT_DELAYED_WORK(&ts->nvt_lockdown_work, get_lockdown_info);
 	INIT_WORK(&ts->nvt_panel_fw_correct_work, nvt_panel_fw_correct_work_fn);
-	// read panel lockdown before boot firmware selection when possible
-	queue_delayed_work(nvt_lockdown_wq, &ts->nvt_lockdown_work, msecs_to_jiffies(1000));
+	queue_delayed_work(nvt_lockdown_wq, &ts->nvt_lockdown_work, msecs_to_jiffies(5000));
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
@@ -3286,8 +3294,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_create_nvt_fwu_wq_failed;
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
-	// after lockdown read; panel is usually ready by then
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(2500));
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(100));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);

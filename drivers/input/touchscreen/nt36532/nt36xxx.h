@@ -110,8 +110,8 @@ extern const uint16_t touch_key_array[TOUCH_KEY_NUM];
 extern const uint16_t gesture_key_array[];
 #endif
 #define BOOT_UPDATE_FIRMWARE 1
-#define BOOT_UPDATE_FIRMWARE_NAME "novatek_nt36532_m82_fw_tm.bin"
-#define MP_UPDATE_FIRMWARE_NAME   "novatek_nt36532_m82_mp_tm.bin"
+#define BOOT_UPDATE_FIRMWARE_NAME "novatek_nt36532_m82_fw_csot.bin"
+#define MP_UPDATE_FIRMWARE_NAME   "novatek_nt36532_m82_mp_csot.bin"
 #define DEFAULT_DEBUG_FW_NAME     "novatek_debug_fw.bin"
 #define DEFAULT_DEBUG_MP_NAME     "novatek_debug_mp.bin"
 #define NVT_SUPER_RESOLUTION_N 10
@@ -315,5 +315,4 @@ bool nvt_get_dbgfw_status(void);
 extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 int switch_pen_input_device(void);
-void nvt_sync_input_abs_params(void);
 #endif /* _LINUX_NVT_TOUCH_H */
