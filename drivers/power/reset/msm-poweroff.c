@@ -10,7 +10,6 @@
 
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/string.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/reboot.h>
@@ -75,24 +74,6 @@ static void *emergency_dload_mode_addr;
 static bool scm_dload_supported;
 
 static bool force_warm_reboot;
-
-/*
- * pipa ships a prebuilt DTB without qcom,force-warm-reboot. Warm reset on
- * kernel reboot lets qpnp report a warm boot so display can skip stale
- * cont_splash handoff after Phosh/systemd restart.
- */
-static bool msm_pipa_warm_reboot(void)
-{
-	static int pipa = -1;
-
-	if (pipa < 0) {
-		const char *model = of_get_property(of_root, "model", NULL);
-
-		pipa = model && strstr(model, "pipa") ? 1 : 0;
-	}
-
-	return pipa > 0;
-}
 
 /* interface for exporting attributes */
 struct reset_attribute {
@@ -526,14 +507,11 @@ static void msm_restart_prepare(const char *cmd)
 				(cmd != NULL && cmd[0] != '\0'));
 	}
 
-	bool warm_reboot;
-
-	warm_reboot = force_warm_reboot || need_warm_reset || msm_pipa_warm_reboot();
-	if (warm_reboot)
+	if (force_warm_reboot)
 		pr_info("Forcing a warm reset of the system\n");
 
 	/* Hard reset the PMIC unless memory contents must be maintained. */
-	if (warm_reboot)
+	if (force_warm_reboot || need_warm_reset)
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	else
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);

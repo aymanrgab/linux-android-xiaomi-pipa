@@ -29,6 +29,7 @@
 #include <linux/dma-buf.h>
 #include <linux/memblock.h>
 #include <linux/bootmem.h>
+#include <linux/io.h>
 #include <linux/input/qpnp-power-on.h>
 #include <soc/qcom/scm.h>
 
@@ -3542,11 +3543,49 @@ static int sde_kms_pd_disable(struct generic_pm_domain *genpd)
 }
 
 /*
- * On warm reboot the panel and MDP pipes stay active with the previous
- * session's scanout buffer. Reusing that as cont_splash shows garbage
- * (vertical lines) and leaves planes in an inconsistent state.
+ * On kernel reboot the panel and MDP pipes can stay active with the previous
+ * session's scanout buffer. Reusing that as cont_splash shows garbage or a
+ * gray screen. PMIC warm-reset is unreliable on pipa (hard reset still looks
+ * "cold"), so also check the imem restart reason written by msm-poweroff.
  */
-static void sde_kms_skip_cont_splash_on_warm_reset(struct sde_kms *sde_kms)
+#define SDE_IMEM_RESTART_REASON_OFF	0x65c
+
+static bool sde_kms_is_kernel_reboot(void)
+{
+	struct device_node *np;
+	void __iomem *base;
+	u32 reason;
+	bool ret = false;
+
+	np = of_find_compatible_node(NULL, NULL, "qcom,msm-imem");
+	if (!np)
+		return false;
+
+	base = of_iomap(np, 0);
+	of_node_put(np);
+	if (!base)
+		return false;
+
+	reason = readl_relaxed(base + SDE_IMEM_RESTART_REASON_OFF);
+	iounmap(base);
+
+	switch (reason) {
+	case 0x77665501: /* normal */
+	case 0x77665502: /* recovery / exaid */
+	case 0x77665503: /* rtc */
+	case 0x77665508: /* dm-verity corrupted */
+	case 0x77665509: /* dm-verity enforcing */
+	case 0x7766550a: /* keys clear */
+		ret = true;
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
+static void sde_kms_skip_cont_splash_on_reboot(struct sde_kms *sde_kms)
 {
 	int warm;
 
@@ -3554,16 +3593,22 @@ static void sde_kms_skip_cont_splash_on_warm_reset(struct sde_kms *sde_kms)
 		return;
 
 	warm = qpnp_pon_is_warm_reset();
-	if (warm <= 0) {
-		if (warm < 0)
-			SDE_DEBUG("warm reset unknown (%d), keep cont_splash\n",
-					warm);
-		else
-			SDE_DEBUG("cold PMIC boot, keep cont_splash for splash\n");
-		return;
+	if (warm > 0) {
+		DRM_INFO("pipa: warm PMIC boot (pon=%d), skip cont_splash\n", warm);
+		goto skip;
 	}
 
-	DRM_INFO("pipa: warm reboot (pon=%d), skip cont_splash handoff\n", warm);
+	if (sde_kms_is_kernel_reboot()) {
+		DRM_INFO("pipa: kernel reboot marker in imem, skip cont_splash\n");
+		goto skip;
+	}
+
+	if (warm < 0)
+		SDE_DEBUG("warm reset unknown (%d), keep cont_splash\n", warm);
+
+	return;
+
+skip:
 	sde_kms->splash_data.num_splash_regions = 0;
 	sde_kms->splash_data.num_splash_displays = 0;
 }
@@ -4030,7 +4075,7 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 	if (rc)
 		SDE_DEBUG("sde splash data fetch failed: %d\n", rc);
 
-	sde_kms_skip_cont_splash_on_warm_reset(sde_kms);
+	sde_kms_skip_cont_splash_on_reboot(sde_kms);
 
 	rc = pm_runtime_get_sync(sde_kms->dev->dev);
 	if (rc < 0) {
