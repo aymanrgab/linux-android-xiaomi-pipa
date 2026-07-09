@@ -99,6 +99,7 @@ static void nvt_ts_late_resume(struct early_suspend *h);
 static void release_touch_event(void);
 static void release_pen_event(void);
 static void nvt_all_para_recovery(void);
+static void nvt_panel_fw_correct_work_fn(struct work_struct *work);
 
 extern int dsi_panel_lockdown_info_read(unsigned char *plockdowninfo);
 extern void dsi_panel_doubleclick_enable(bool on);
@@ -1479,14 +1480,55 @@ bool is_lockdown_empty(u8 *lockdown)
 	return ret;
 }
 
+void nvt_sync_input_abs_params(void)
+{
+	if (!ts || !ts->input_dev)
+		return;
+
+#if NVT_SUPER_RESOLUTION_N
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0,
+			     ts->abs_x_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0,
+			     ts->abs_y_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
+#else
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
+#endif
+	NVT_LOG("touch abs %ux%u\n", ts->abs_x_max, ts->abs_y_max);
+}
+
+static void nvt_panel_fw_correct_work_fn(struct work_struct *work)
+{
+	char old_fw[64] = {0};
+	int ret;
+
+	if (!ts || is_lockdown_empty(ts->lockdown_info))
+		return;
+
+	if (ts->fw_name)
+		strlcpy(old_fw, ts->fw_name, sizeof(old_fw));
+
+	nvt_match_fw();
+
+	if (!ts->fw_name || !old_fw[0] || !strcmp(old_fw, ts->fw_name))
+		return;
+
+	NVT_LOG("panel fw correction: %s -> %s\n", old_fw, ts->fw_name);
+	mutex_lock(&ts->lock);
+	ret = nvt_update_firmware(ts->fw_name);
+	if (ret >= 0)
+		nvt_get_fw_info();
+	mutex_unlock(&ts->lock);
+	if (ret >= 0)
+		nvt_sync_input_abs_params();
+	switch_pen_input_device();
+}
+
 void nvt_match_fw(void)
 {
 	NVT_LOG("start match fw name");
 	if (is_lockdown_empty(ts->lockdown_info)) {
 		if (!ts->lkdown_readed) {
-			/* Avoid blocking on dsi_panel_lockdown_info_read() during
-			 * initramfs/cont_splash; use default firmware instead.
-			 */
 			NVT_LOG("lockdown not ready, use default fw\n");
 			ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
 			ts->mp_name = MP_UPDATE_FIRMWARE_NAME;
@@ -2709,10 +2751,14 @@ static void get_lockdown_info(struct work_struct *work)
 		ret = dsi_panel_lockdown_info_read(ts->lockdown_info);
 		if (ret < 0) {
 			NVT_ERR("can't get lockdown info");
-		} else {
-			NVT_LOG("Lockdown:0x%02x,0x%02x\n",
-				ts->lockdown_info[0], ts->lockdown_info[1]);
+			return;
 		}
+		if (is_lockdown_empty(ts->lockdown_info)) {
+			NVT_ERR("lockdown empty after read");
+			return;
+		}
+		NVT_LOG("Lockdown:0x%02x,0x%02x\n",
+			ts->lockdown_info[0], ts->lockdown_info[1]);
 		ts->lkdown_readed = true;
 		NVT_LOG("READ LOCKDOWN!!!");
 	} else {
@@ -2720,6 +2766,9 @@ static void get_lockdown_info(struct work_struct *work)
 		NVT_LOG("Lockdown:0x%02x,0x%02x\n", ts->lockdown_info[0],
 			ts->lockdown_info[1]);
 	}
+
+	if (!is_lockdown_empty(ts->lockdown_info) && nvt_fwu_wq)
+		queue_work(nvt_fwu_wq, &ts->nvt_panel_fw_correct_work);
 }
 
 #ifdef CONFIG_TOUCHSCREEN_NVT_DEBUG_FS
@@ -3221,8 +3270,9 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		NVT_LOG("nvt_lockdown_wq create workqueue successful!\n");
 	}
 	INIT_DELAYED_WORK(&ts->nvt_lockdown_work, get_lockdown_info);
-	// please make sure boot update start after display reset(RESX) sequence
-	queue_delayed_work(nvt_lockdown_wq, &ts->nvt_lockdown_work, msecs_to_jiffies(5000));
+	INIT_WORK(&ts->nvt_panel_fw_correct_work, nvt_panel_fw_correct_work_fn);
+	// read panel lockdown before boot firmware selection when possible
+	queue_delayed_work(nvt_lockdown_wq, &ts->nvt_lockdown_work, msecs_to_jiffies(1000));
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 1);
@@ -3236,8 +3286,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_create_nvt_fwu_wq_failed;
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
-	// please make sure boot update start after display reset(RESX) sequence, usually ts driver probs after reset is done
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(100));
+	// after lockdown read; panel is usually ready by then
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(2500));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
@@ -3423,6 +3473,7 @@ err_create_nvt_esd_check_wq_failed:
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_work_sync(&ts->nvt_panel_fw_correct_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3547,6 +3598,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_work_sync(&ts->nvt_panel_fw_correct_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3659,6 +3711,7 @@ static void nvt_ts_shutdown(struct spi_device *client)
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_work_sync(&ts->nvt_panel_fw_correct_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}

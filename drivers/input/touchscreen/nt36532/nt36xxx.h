@@ -163,6 +163,7 @@ struct nvt_ts_data {
 	struct input_dev *input_dev;
 	struct delayed_work nvt_fwu_work;
 	struct delayed_work nvt_lockdown_work;
+	struct work_struct nvt_panel_fw_correct_work;
 	int db_wakeup;
 #if defined(NVT_PEN_CONNECT_STRATEGY)
 	struct work_struct pen_charge_state_change_work;
@@ -314,4 +315,5 @@ bool nvt_get_dbgfw_status(void);
 extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 int switch_pen_input_device(void);
+void nvt_sync_input_abs_params(void);
 #endif /* _LINUX_NVT_TOUCH_H */
