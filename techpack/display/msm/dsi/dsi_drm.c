@@ -223,7 +223,8 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 
 	if (c_bridge->display->is_prim_display && atomic_read(&prim_panel_is_on) &&
 	    !mi_cfg->fod_dimlayer_enabled &&
-	    dsi_panel_initialized(c_bridge->display->panel)) {
+	    dsi_panel_initialized(c_bridge->display->panel) &&
+	    c_bridge->display->panel->power_mode == SDE_MODE_DPMS_ON) {
 		cancel_delayed_work_sync(&prim_panel_work);
 		prim_panel_off_deferred = false;
 		__pm_relax(prim_panel_wakelock);
@@ -457,7 +458,7 @@ static void prim_panel_off_delayed_work(struct work_struct *work)
 		return;
 	}
 	mutex_unlock(&gbridge->base.lock);
-} // git
+}
 
 static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 				struct drm_display_mode *mode,

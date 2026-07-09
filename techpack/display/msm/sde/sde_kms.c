@@ -3558,10 +3558,12 @@ static void sde_kms_skip_cont_splash_on_warm_reset(struct sde_kms *sde_kms)
 		if (warm < 0)
 			SDE_DEBUG("warm reset unknown (%d), keep cont_splash\n",
 					warm);
+		else
+			SDE_DEBUG("cold PMIC boot, keep cont_splash for splash\n");
 		return;
 	}
 
-	DRM_INFO("pipa: warm reboot, skip cont_splash handoff\n");
+	DRM_INFO("pipa: warm reboot (pon=%d), skip cont_splash handoff\n", warm);
 	sde_kms->splash_data.num_splash_regions = 0;
 	sde_kms->splash_data.num_splash_displays = 0;
 }
