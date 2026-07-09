@@ -98,8 +98,6 @@ static void nvt_ts_late_resume(struct early_suspend *h);
 #endif
 static void release_touch_event(void);
 static void release_pen_event(void);
-
-bool is_lockdown_empty(u8 *lockdown);
 static void nvt_all_para_recovery(void);
 
 extern int dsi_panel_lockdown_info_read(unsigned char *plockdowninfo);
@@ -1218,60 +1216,6 @@ void nvt_ts_pen_gesture_report(uint8_t pen_gesture_id)
 }
 #endif
 
-void nvt_ts_sync_input_abs(void)
-{
-	if (!ts || !ts->input_dev)
-		return;
-
-#if NVT_SUPER_RESOLUTION_N
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0,
-			     ts->abs_x_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0,
-			     ts->abs_y_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
-#else
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
-	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
-#endif
-	NVT_LOG("sync touch abs %ux%u\n", ts->abs_x_max, ts->abs_y_max);
-}
-
-void nvt_ts_boot_fw_complete(void)
-{
-	if (ts) {
-		flush_workqueue(ts->event_wq);
-		bTouchIsAwake = 1;
-		nvt_irq_enable(true);
-	}
-	NVT_LOG("boot firmware ready, touch active\n");
-}
-
-void nvt_ts_boot_fw_failed(void)
-{
-	NVT_ERR("boot firmware update failed, enabling touch anyway\n");
-	nvt_ts_boot_fw_complete();
-}
-
-static void nvt_pen_input_register_update(bool enable)
-{
-	int ret;
-
-	if (!ts || !ts->pen_input_dev)
-		return;
-
-	if (enable && !ts->pen_input_registered) {
-		ret = input_register_device(ts->pen_input_dev);
-		if (ret) {
-			NVT_ERR("register pen input device failed. ret=%d\n", ret);
-			return;
-		}
-		ts->pen_input_registered = true;
-	} else if (!enable && ts->pen_input_registered) {
-		release_pen_event();
-		input_unregister_device(ts->pen_input_dev);
-		ts->pen_input_registered = false;
-	}
-}
-
 int switch_pen_input_device(void) {
 	uint8_t buf[8] = {0};
 	int32_t ret = 0;
@@ -1304,7 +1248,6 @@ int switch_pen_input_device(void) {
 
 nvt_set_pen_enable_out:
 	mutex_unlock(&ts->pen_switch_lock);
-	nvt_pen_input_register_update(!!enable);
 	NVT_LOG("--\n");
 
 	return ret;
@@ -1332,7 +1275,7 @@ static void release_touch_event(void) {
 }
 
 static void release_pen_event(void) {
-	if (ts && ts->pen_input_dev && ts->pen_input_registered) {
+	if (ts && ts->pen_input_dev) {
 		input_report_abs(ts->pen_input_dev, ABS_X, 0);
 		input_report_abs(ts->pen_input_dev, ABS_Y, 0);
 		input_report_abs(ts->pen_input_dev, ABS_PRESSURE, 0);
@@ -1487,16 +1430,10 @@ static int32_t nvt_parse_dt(struct device *dev)
 
 static int nvt_get_panel_type(struct nvt_ts_data *ts_data)
 {
-	int i = 2;
+	int i;
 	int j;
 	u8 *lockdown = ts_data->lockdown_info;
 	struct nvt_config_info *panel_list = ts->config_array;
-
-	if (is_lockdown_empty(lockdown)) {
-		NVT_LOG("lockdown empty, use default fw\n");
-		ts->panel_index = -EINVAL;
-		return -EINVAL;
-	}
 
 	for (j = 0; j < 60; j++) {
 		if (lockdown[1] == 0x42) {
@@ -1507,6 +1444,7 @@ static int nvt_get_panel_type(struct nvt_ts_data *ts_data)
 			i = 1;
 			break;
 		}
+
 		mdelay(100);
 	}
 	if (i != 0 && i != 1){
@@ -1546,11 +1484,15 @@ void nvt_match_fw(void)
 	NVT_LOG("start match fw name");
 	if (is_lockdown_empty(ts->lockdown_info)) {
 		if (!ts->lkdown_readed) {
+			/* Avoid blocking on dsi_panel_lockdown_info_read() during
+			 * initramfs/cont_splash; use default firmware instead.
+			 */
 			NVT_LOG("lockdown not ready, use default fw\n");
 			ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
 			ts->mp_name = MP_UPDATE_FIRMWARE_NAME;
 			return;
 		}
+		flush_delayed_work(&ts->nvt_lockdown_work);
 	}
 	if (nvt_get_panel_type(ts) < 0) {
 		ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
@@ -2050,7 +1992,7 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 
 	input_sync(ts->input_dev);
 
-	if (ts->pen_support && ts->pen_input_registered) {
+	if (ts->pen_support) {
 /*
 		//--- dump pen buf ---
 		printk("%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
@@ -3238,8 +3180,12 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		ts->pen_input_dev->phys = ts->pen_phys;
 		ts->pen_input_dev->id.bustype = BUS_SPI;
 
-		ts->pen_input_registered = false;
-		NVT_LOG("pen input device deferred until stylus connect\n");
+		//---register pen input device---
+		ret = input_register_device(ts->pen_input_dev);
+		if (ret) {
+			NVT_ERR("register pen input device (%s) failed. ret=%d\n", ts->pen_input_dev->name, ret);
+			goto err_pen_input_register_device_failed;
+		}
 	} /* if (ts->pen_support) */
 
 	//---set int-pin & request irq---
@@ -3420,8 +3366,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 #endif
 
-	bTouchIsAwake = 0;
-	NVT_LOG("end (awaiting boot firmware update)\n");
+	bTouchIsAwake = 1;
+	NVT_LOG("end\n");
+
+	nvt_irq_enable(true);
 
 	return 0;
 
@@ -3496,10 +3444,11 @@ err_create_nvt_lockdown_wq_failed:
 	free_irq(client->irq, ts);
 err_int_request_failed:
 	if (ts->pen_support) {
-		if (ts->pen_input_registered) {
-			input_unregister_device(ts->pen_input_dev);
-			ts->pen_input_registered = false;
-		}
+		input_unregister_device(ts->pen_input_dev);
+		ts->pen_input_dev = NULL;
+	}
+err_pen_input_register_device_failed:
+	if (ts->pen_support) {
 		if (ts->pen_input_dev) {
 			input_free_device(ts->pen_input_dev);
 			ts->pen_input_dev = NULL;
@@ -3622,12 +3571,8 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	nvt_gpio_deconfig(ts);
 
 	if (ts->pen_support) {
-		if (ts->pen_input_registered) {
-			input_unregister_device(ts->pen_input_dev);
-			ts->pen_input_registered = false;
-		}
 		if (ts->pen_input_dev) {
-			input_free_device(ts->pen_input_dev);
+			input_unregister_device(ts->pen_input_dev);
 			ts->pen_input_dev = NULL;
 		}
 	}
@@ -3820,7 +3765,17 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	input_sync(ts->input_dev);
 
 	/* release pen event */
-	release_pen_event();
+	if (ts->pen_support) {
+		input_report_abs(ts->pen_input_dev, ABS_X, 0);
+		input_report_abs(ts->pen_input_dev, ABS_Y, 0);
+		input_report_abs(ts->pen_input_dev, ABS_PRESSURE, 0);
+		input_report_abs(ts->pen_input_dev, ABS_TILT_X, 0);
+		input_report_abs(ts->pen_input_dev, ABS_TILT_Y, 0);
+		input_report_abs(ts->pen_input_dev, ABS_DISTANCE, 0);
+		input_report_key(ts->pen_input_dev, BTN_TOUCH, 0);
+		input_report_key(ts->pen_input_dev, BTN_TOOL_PEN, 0);
+		input_sync(ts->pen_input_dev);
+	}
 
 	msleep(50);
 

@@ -4,12 +4,12 @@ _pipa_kmsg() {
 	echo "initrd: pipa: $1" >/dev/kmsg 2>/dev/null || true
 }
 
-_pipa_wait_for_nvt_ready() {
+_pipa_wait_for_touch_fw() {
 	max_wait="${1:-300}"
 	i=0
 
 	while [ "$i" -lt "$max_wait" ]; do
-		if dmesg 2>/dev/null | grep -q 'boot firmware ready, touch active'; then
+		if dmesg 2>/dev/null | grep -q 'Update firmware success'; then
 			return 0
 		fi
 		sleep 0.1
@@ -38,12 +38,13 @@ halium_hook_setup_touchscreen() {
 
 	_pipa_ensure_input_nodes
 
-	if _pipa_wait_for_nvt_ready 300; then
-		_pipa_kmsg "NT36532 touch ready"
+	if _pipa_wait_for_touch_fw 300; then
+		_pipa_kmsg "NT36532 firmware ready"
 	else
-		_pipa_kmsg "NT36532 wait timed out, continuing"
+		_pipa_kmsg "NT36532 firmware wait timed out, continuing"
 	fi
 
+	sleep 0.5
 	_pipa_ensure_input_nodes
 }
 

@@ -227,7 +227,6 @@ struct nvt_ts_data {
 	uint8_t y_gang_num;
 	uint8_t debug_flag;
 	struct input_dev *pen_input_dev;
-	bool pen_input_registered;
 	bool pen_input_dev_enable;
 	int8_t pen_phys[32];
 	int result_type;
@@ -315,7 +314,4 @@ bool nvt_get_dbgfw_status(void);
 extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 int switch_pen_input_device(void);
-void nvt_ts_boot_fw_complete(void);
-void nvt_ts_sync_input_abs(void);
-void nvt_ts_boot_fw_failed(void);
 #endif /* _LINUX_NVT_TOUCH_H */
