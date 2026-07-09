@@ -98,6 +98,8 @@ static void nvt_ts_late_resume(struct early_suspend *h);
 #endif
 static void release_touch_event(void);
 static void release_pen_event(void);
+
+bool is_lockdown_empty(u8 *lockdown);
 static void nvt_all_para_recovery(void);
 
 extern int dsi_panel_lockdown_info_read(unsigned char *plockdowninfo);
@@ -3268,7 +3270,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 			NVT_ERR("register pen input device (%s) failed. ret=%d\n", ts->pen_input_dev->name, ret);
 			goto err_pen_input_register_device_failed;
 		}
-		input_disable_device(ts->pen_input_dev);
 	} /* if (ts->pen_support) */
 
 	//---set int-pin & request irq---
