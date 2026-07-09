@@ -1,0 +1,14 @@
+[Unit]
+Description=Dump dmesg to persist before reboot/shutdown
+DefaultDependencies=no
+Before=shutdown.target reboot.target halt.target poweroff.target kexec.target
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/pipa-reboot-capture/dump.sh shutdown
+TimeoutSec=30
+RemainAfterExit=yes
+
+[Install]
+WantedBy=shutdown.target reboot.target halt.target poweroff.target

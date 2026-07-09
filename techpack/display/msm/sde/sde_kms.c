@@ -29,6 +29,7 @@
 #include <linux/dma-buf.h>
 #include <linux/memblock.h>
 #include <linux/bootmem.h>
+#include <linux/input/qpnp-power-on.h>
 #include <soc/qcom/scm.h>
 
 #include "msm_drv.h"
@@ -3540,6 +3541,31 @@ static int sde_kms_pd_disable(struct generic_pm_domain *genpd)
 	return 0;
 }
 
+/*
+ * On warm reboot the panel and MDP pipes stay active with the previous
+ * session's scanout buffer. Reusing that as cont_splash shows garbage
+ * (vertical lines) and leaves planes in an inconsistent state.
+ */
+static void sde_kms_skip_cont_splash_on_warm_reset(struct sde_kms *sde_kms)
+{
+	int warm;
+
+	if (!sde_kms || !sde_kms->splash_data.num_splash_regions)
+		return;
+
+	warm = qpnp_pon_is_warm_reset();
+	if (warm <= 0) {
+		if (warm < 0)
+			SDE_DEBUG("warm reset unknown (%d), keep cont_splash\n",
+					warm);
+		return;
+	}
+
+	DRM_INFO("pipa: warm reboot, skip cont_splash handoff\n");
+	sde_kms->splash_data.num_splash_regions = 0;
+	sde_kms->splash_data.num_splash_displays = 0;
+}
+
 static int _sde_kms_get_splash_data(struct sde_splash_data *data)
 {
 	int i = 0;
@@ -4001,6 +4027,8 @@ static int sde_kms_hw_init(struct msm_kms *kms)
 	rc = _sde_kms_get_splash_data(&sde_kms->splash_data);
 	if (rc)
 		SDE_DEBUG("sde splash data fetch failed: %d\n", rc);
+
+	sde_kms_skip_cont_splash_on_warm_reset(sde_kms);
 
 	rc = pm_runtime_get_sync(sde_kms->dev->dev);
 	if (rc < 0) {
