@@ -23,6 +23,8 @@
 
 #if BOOT_UPDATE_FIRMWARE
 
+extern bool nvt_boot_fw_done;
+
 static ktime_t start, end;
 const struct firmware *fw_entry = NULL;
 static size_t fw_need_write_size = 0;
@@ -884,6 +886,7 @@ void Boot_Update_Firmware(struct work_struct *work)
 	}
 	nvt_get_fw_info();
 	mutex_unlock(&ts->lock);
+	nvt_boot_fw_done = true;
 	switch_pen_input_device();
 }
 #endif /* BOOT_UPDATE_FIRMWARE */

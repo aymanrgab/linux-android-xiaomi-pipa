@@ -80,6 +80,8 @@ struct nvt_ts_data *ts;
 
 #if BOOT_UPDATE_FIRMWARE
 static struct workqueue_struct *nvt_fwu_wq;
+bool nvt_boot_fw_done;
+static bool nvt_probe_done;
 extern void Boot_Update_Firmware(struct work_struct *work);
 #endif
 
@@ -151,7 +153,9 @@ static ssize_t double_tap_store(struct kobject *kobj,
 	if (rc)
 		return -EINVAL;
 
+	mutex_lock(&ts->lock);
 	ts->db_wakeup = !!val;
+	mutex_unlock(&ts->lock);
 	dsi_panel_doubleclick_enable(!!val);
 	return count;
 }
@@ -2044,6 +2048,8 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	input_sync(ts->input_dev);
 
 	if (ts->pen_support) {
+		struct input_dev *pen_dev;
+
 /*
 		//--- dump pen buf ---
 		printk("%02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
@@ -2057,6 +2063,13 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 			goto XFER_ERROR;
 		}
 #endif // #if CHECK_PEN_DATA_CHECKSUM
+
+		mutex_lock(&ts->pen_switch_lock);
+		pen_dev = ts->pen_input_dev;
+		if (!pen_dev) {
+			mutex_unlock(&ts->pen_switch_lock);
+			goto XFER_ERROR;
+		}
 
 		// parse and handle pen report
 		pen_format_id = point_data[66];
@@ -2075,38 +2088,40 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 //				printk("x=%d,y=%d,p=%d,tx=%d,ty=%d,d=%d,b1=%d,b2=%d,bat=%d\n", pen_x, pen_y, pen_pressure,
 //						pen_tilt_x, pen_tilt_y, pen_distance, pen_btn1, pen_btn2, pen_battery);
 
-				input_report_abs(ts->pen_input_dev, ABS_X, pen_x);
-				input_report_abs(ts->pen_input_dev, ABS_Y, pen_y);
-				input_report_abs(ts->pen_input_dev, ABS_PRESSURE, pen_pressure);
-				input_report_key(ts->pen_input_dev, BTN_TOUCH, !!pen_pressure);
-				input_report_abs(ts->pen_input_dev, ABS_TILT_X, pen_tilt_x);
-				input_report_abs(ts->pen_input_dev, ABS_TILT_Y, pen_tilt_y);
-				input_report_abs(ts->pen_input_dev, ABS_DISTANCE, pen_distance);
-				input_report_key(ts->pen_input_dev, BTN_TOOL_PEN, !!pen_distance || !!pen_pressure);
-				input_report_key(ts->pen_input_dev, KEY_PAGEDOWN, pen_btn1);
-				input_report_key(ts->pen_input_dev, KEY_PAGEUP, pen_btn2);
+				input_report_abs(pen_dev, ABS_X, pen_x);
+				input_report_abs(pen_dev, ABS_Y, pen_y);
+				input_report_abs(pen_dev, ABS_PRESSURE, pen_pressure);
+				input_report_key(pen_dev, BTN_TOUCH, !!pen_pressure);
+				input_report_abs(pen_dev, ABS_TILT_X, pen_tilt_x);
+				input_report_abs(pen_dev, ABS_TILT_Y, pen_tilt_y);
+				input_report_abs(pen_dev, ABS_DISTANCE, pen_distance);
+				input_report_key(pen_dev, BTN_TOOL_PEN, !!pen_distance || !!pen_pressure);
+				input_report_key(pen_dev, KEY_PAGEDOWN, pen_btn1);
+				input_report_key(pen_dev, KEY_PAGEUP, pen_btn2);
 				// TBD: pen battery event report
 				// NVT_LOG("pen_battery=%d\n", pen_battery);
 			} else if (pen_format_id == 0xF0) {
 				// report Pen ID
 			} else {
 				NVT_ERR("Unknown pen format id!\n");
+				mutex_unlock(&ts->pen_switch_lock);
 				goto XFER_ERROR;
 			}
 		} else { // pen_format_id = 0xFF, i.e. no pen present
-			input_report_abs(ts->pen_input_dev, ABS_X, 0);
-			input_report_abs(ts->pen_input_dev, ABS_Y, 0);
-			input_report_abs(ts->pen_input_dev, ABS_PRESSURE, 0);
-			input_report_abs(ts->pen_input_dev, ABS_TILT_X, 0);
-			input_report_abs(ts->pen_input_dev, ABS_TILT_Y, 0);
-			input_report_abs(ts->pen_input_dev, ABS_DISTANCE, 0);
-			input_report_key(ts->pen_input_dev, BTN_TOUCH, 0);
-			input_report_key(ts->pen_input_dev, BTN_TOOL_PEN, 0);
-			input_report_key(ts->pen_input_dev, KEY_PAGEDOWN, 0);
-			input_report_key(ts->pen_input_dev, KEY_PAGEUP, 0);
+			input_report_abs(pen_dev, ABS_X, 0);
+			input_report_abs(pen_dev, ABS_Y, 0);
+			input_report_abs(pen_dev, ABS_PRESSURE, 0);
+			input_report_abs(pen_dev, ABS_TILT_X, 0);
+			input_report_abs(pen_dev, ABS_TILT_Y, 0);
+			input_report_abs(pen_dev, ABS_DISTANCE, 0);
+			input_report_key(pen_dev, BTN_TOUCH, 0);
+			input_report_key(pen_dev, BTN_TOOL_PEN, 0);
+			input_report_key(pen_dev, KEY_PAGEDOWN, 0);
+			input_report_key(pen_dev, KEY_PAGEUP, 0);
 		}
 
-		input_sync(ts->pen_input_dev);
+		input_sync(pen_dev);
+		mutex_unlock(&ts->pen_switch_lock);
 	} /* if (ts->pen_support) */
 
 XFER_ERROR:
@@ -3424,6 +3439,9 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 	bTouchIsAwake = 1;
+#if BOOT_UPDATE_FIRMWARE
+	nvt_probe_done = true;
+#endif
 	NVT_LOG("end\n");
 
 	nvt_irq_enable(true);
@@ -3485,12 +3503,12 @@ err_create_nvt_esd_check_wq_failed:
 		nvt_fwu_wq = NULL;
 	}
 err_create_nvt_fwu_wq_failed:
+#endif
 	if (nvt_lockdown_wq) {
 		cancel_delayed_work_sync(&ts->nvt_lockdown_work);
 		destroy_workqueue(nvt_lockdown_wq);
 		nvt_lockdown_wq = NULL;
 	}
-#endif
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 0);
 #endif
@@ -3586,7 +3604,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	if (pen_charge_state_notifier_unregister_client(&ts->pen_charge_state_notifier))
 		NVT_ERR("Error occurred while unregistering pen status switch state notifier.\n");
 #endif
-	mutex_destroy(&ts->pen_switch_lock);
 	destroy_workqueue(ts->event_wq);
 	ts->event_wq = NULL;
 
@@ -3602,6 +3619,11 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	}
 #endif
 
+	if (nvt_lockdown_wq) {
+		cancel_delayed_work_sync(&ts->nvt_lockdown_work);
+		destroy_workqueue(nvt_lockdown_wq);
+		nvt_lockdown_wq = NULL;
+	}
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
@@ -3610,12 +3632,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 		nvt_fwu_wq = NULL;
 	}
 #endif
-
-	if (nvt_lockdown_wq) {
-		cancel_delayed_work_sync(&ts->nvt_lockdown_work);
-		destroy_workqueue(nvt_lockdown_wq);
-		nvt_lockdown_wq = NULL;
-	}
 
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 0);
@@ -3630,11 +3646,17 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	nvt_gpio_deconfig(ts);
 
 	if (ts->pen_support) {
-		if (ts->pen_input_dev) {
-			input_unregister_device(ts->pen_input_dev);
-			ts->pen_input_dev = NULL;
-		}
+		struct input_dev *pen_dev;
+
+		mutex_lock(&ts->pen_switch_lock);
+		pen_dev = ts->pen_input_dev;
+		ts->pen_input_dev = NULL;
+		mutex_unlock(&ts->pen_switch_lock);
+		if (pen_dev)
+			input_unregister_device(pen_dev);
 	}
+
+	mutex_destroy(&ts->pen_switch_lock);
 
 	if (ts->input_dev) {
 		input_unregister_device(ts->input_dev);
@@ -3696,7 +3718,6 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	if (pen_charge_state_notifier_unregister_client(&ts->pen_charge_state_notifier))
 		NVT_ERR("Error occurred while unregistering pen status switch state notifier.\n");
 #endif
-	mutex_destroy(&ts->pen_switch_lock);
 	destroy_workqueue(ts->event_wq);
 	ts->event_wq = NULL;
 
@@ -3715,6 +3736,11 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	}
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
+	if (nvt_lockdown_wq) {
+		cancel_delayed_work_sync(&ts->nvt_lockdown_work);
+		destroy_workqueue(nvt_lockdown_wq);
+		nvt_lockdown_wq = NULL;
+	}
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
@@ -3724,15 +3750,11 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	}
 #endif
 
-	if (nvt_lockdown_wq) {
-		cancel_delayed_work_sync(&ts->nvt_lockdown_work);
-		destroy_workqueue(nvt_lockdown_wq);
-		nvt_lockdown_wq = NULL;
-	}
-
 #if WAKEUP_GESTURE
 	device_init_wakeup(&ts->input_dev->dev, 0);
 #endif
+
+	mutex_destroy(&ts->pen_switch_lock);
 }
 
 /*******************************************************
@@ -3894,18 +3916,26 @@ static int32_t nvt_ts_resume(struct device *dev)
 #if NVT_TOUCH_SUPPORT_HW_RST
 	gpio_set_value(ts->reset_gpio, 1);
 #endif
-	if (nvt_get_dbgfw_status()) {
-		if (nvt_update_firmware(DEFAULT_DEBUG_FW_NAME) < 0) {
-			NVT_ERR("use built-in fw");
-			nvt_update_firmware(ts->fw_name);
-		}
-	} else {
-		if (nvt_update_firmware(ts->fw_name)) {
-			NVT_ERR("download firmware failed, ignore check fw state\n");
+#if BOOT_UPDATE_FIRMWARE
+	if (nvt_probe_done && nvt_boot_fw_done) {
+#endif
+		if (nvt_get_dbgfw_status()) {
+			if (nvt_update_firmware(DEFAULT_DEBUG_FW_NAME) < 0) {
+				NVT_ERR("use built-in fw");
+				nvt_update_firmware(ts->fw_name);
+			}
 		} else {
-			nvt_check_fw_reset_state(RESET_STATE_REK);
+			if (nvt_update_firmware(ts->fw_name)) {
+				NVT_ERR("download firmware failed, ignore check fw state\n");
+			} else {
+				nvt_check_fw_reset_state(RESET_STATE_REK);
+			}
 		}
+#if BOOT_UPDATE_FIRMWARE
+	} else {
+		NVT_LOG("skip fw update, boot worker handles initial programming\n");
 	}
+#endif
 
 	if (!ts->db_wakeup) {
 		nvt_irq_enable(true);

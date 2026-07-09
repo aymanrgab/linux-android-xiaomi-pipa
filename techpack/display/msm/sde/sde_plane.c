@@ -2550,10 +2550,13 @@ static int _sde_plane_validate_shared_crtc(struct sde_plane *psde,
 
 				if (splash_display->pipes[j].sspp ==
 						psde->pipe) {
+					int crtc_id = -1;
+
+					if (splash_display->encoder->crtc)
+						crtc_id = splash_display->encoder->crtc->base.id;
 					SDE_ERROR_PLANE(psde,
 					"pipe:%d used in cont-splash on crtc:%d\n",
-					psde->pipe,
-					splash_display->encoder->crtc->base.id);
+					psde->pipe, crtc_id);
 					return -EINVAL;
 				}
 			}
