@@ -715,6 +715,9 @@ struct msm_drm_private {
 	/* update the flag when msm driver receives shutdown notification */
 	bool shutdown_in_progress;
 
+	/* set during msm_pdev_shutdown before tearing down display */
+	bool reboot_shutdown;
+
 	struct msm_idle idle;
 };
 

@@ -3567,20 +3567,23 @@ static bool sde_kms_is_kernel_reboot(void)
 		return false;
 
 	reason = readl_relaxed(base + SDE_IMEM_RESTART_REASON_OFF);
-	iounmap(base);
-
-	switch (reason) {
-	case 0x77665501: /* normal */
-	case 0x77665502: /* recovery / exaid */
-	case 0x77665503: /* rtc */
-	case 0x77665508: /* dm-verity corrupted */
-	case 0x77665509: /* dm-verity enforcing */
-	case 0x7766550a: /* keys clear */
-		ret = true;
-		break;
-	default:
-		break;
+	if (reason) {
+		switch (reason) {
+		case 0x77665501: /* normal */
+		case 0x77665502: /* recovery / exaid */
+		case 0x77665503: /* rtc */
+		case 0x77665508: /* dm-verity corrupted */
+		case 0x77665509: /* dm-verity enforcing */
+		case 0x7766550a: /* keys clear */
+			ret = true;
+			break;
+		default:
+			break;
+		}
+		/* one-shot: do not skip cont_splash on a later cold boot */
+		writel_relaxed(0, base + SDE_IMEM_RESTART_REASON_OFF);
 	}
+	iounmap(base);
 
 	return ret;
 }

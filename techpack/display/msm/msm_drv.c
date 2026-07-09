@@ -1177,6 +1177,7 @@ static void msm_lastclose(struct drm_device *dev)
 	struct msm_kms *kms = priv->kms;
 	struct drm_modeset_acquire_ctx ctx;
 	int i, rc;
+	bool reboot_shutdown = priv->reboot_shutdown;
 
 	/* check for splash status before triggering cleanup
 	 * if we end up here with splash status ON i.e before first
@@ -1201,9 +1202,8 @@ static void msm_lastclose(struct drm_device *dev)
 	/* wait for pending vblank requests to be executed by worker thread */
 	flush_workqueue(priv->wq);
 
-	if (priv->fbdev) {
-		if (!priv->shutdown_in_progress)
-			drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
+	if (priv->fbdev && !reboot_shutdown) {
+		drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
 		return;
 	}
 
@@ -2226,11 +2226,14 @@ static void msm_pdev_shutdown(struct platform_device *pdev)
 		return;
 	}
 
-	priv->shutdown_in_progress = true;
+	priv->reboot_shutdown = true;
 
 	dsi_panel_power_turn_off(false);
 
 	msm_lastclose(ddev);
+
+	priv->shutdown_in_progress = true;
+	priv->reboot_shutdown = false;
 }
 
 static const struct of_device_id dt_match[] = {
