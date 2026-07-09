@@ -1228,12 +1228,18 @@ void nvt_ts_pen_gesture_report(uint8_t pen_gesture_id)
 
 void nvt_ts_boot_fw_complete(void)
 {
-	bTouchIsAwake = 1;
-	nvt_irq_enable(true);
 	nvt_block_blank_suspend = true;
 	cancel_delayed_work(&nvt_allow_blank_suspend_work);
 	schedule_delayed_work(&nvt_allow_blank_suspend_work,
 			      msecs_to_jiffies(5 * 60 * 1000));
+
+	if (ts && ts->client && ts->fw_name) {
+		flush_workqueue(ts->event_wq);
+		nvt_ts_resume(&ts->client->dev);
+	} else {
+		bTouchIsAwake = 1;
+		nvt_irq_enable(true);
+	}
 	NVT_LOG("boot firmware ready, touch active\n");
 }
 
@@ -3452,6 +3458,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 	bTouchIsAwake = 0;
+	nvt_block_blank_suspend = true;
+	cancel_delayed_work(&nvt_allow_blank_suspend_work);
+	schedule_delayed_work(&nvt_allow_blank_suspend_work,
+			      msecs_to_jiffies(5 * 60 * 1000));
 	NVT_LOG("end (awaiting boot firmware update)\n");
 
 	return 0;
@@ -4042,6 +4052,10 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 		if (event == MSM_DRM_EARLY_EVENT_BLANK) {
 			if (*blank == MSM_DRM_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
+				if (nvt_block_blank_suspend) {
+					NVT_LOG("ignore blank suspend during splash/unl0kr window\n");
+					return 0;
+				}
 				nvt_ts_suspend(&ts->client->dev);
 			}
 		} else if (event == MSM_DRM_EVENT_BLANK) {
@@ -4066,6 +4080,10 @@ static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long e
 		blank = evdata->data;
 		if (*blank == FB_BLANK_POWERDOWN) {
 			NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
+			if (nvt_block_blank_suspend) {
+				NVT_LOG("ignore blank suspend during splash/unl0kr window\n");
+				return 0;
+			}
 			nvt_ts_suspend(&ts->client->dev);
 		}
 	} else if (evdata && evdata->data && event == FB_EVENT_BLANK) {

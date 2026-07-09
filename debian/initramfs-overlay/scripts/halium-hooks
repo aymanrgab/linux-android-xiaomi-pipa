@@ -69,19 +69,33 @@ _pipa_wake_display() {
 		[ -w "$blank" ] || continue
 		echo 0 > "$blank" 2>/dev/null || true
 	done
+
+	for status in /sys/class/drm/card*/status; do
+		[ -f "$status" ] || continue
+		echo on > "$status" 2>/dev/null || true
+	done
+}
+
+_pipa_ensure_input_nodes() {
+	mkdir -p /dev/input /dev/graphics 2>/dev/null || true
+
+	if command -v udevadm >/dev/null 2>&1; then
+		udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
+		udevadm trigger --subsystem-match=graphics --action=add 2>/dev/null || true
+		udevadm settle --timeout=5 2>/dev/null || true
+	fi
+
+	for ev in /dev/input/event*; do
+		[ -c "$ev" ] || continue
+		chmod 666 "$ev" 2>/dev/null || true
+	done
 }
 
 halium_hook_setup_touchscreen() {
 	_pipa_kmsg "preparing touchscreen for unl0kr"
 
 	_pipa_wake_display
-
-	mkdir -p /dev/input /dev/graphics 2>/dev/null || true
-
-	if command -v udevadm >/dev/null 2>&1; then
-		udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
-		udevadm trigger --subsystem-match=graphics --action=add 2>/dev/null || true
-	fi
+	_pipa_ensure_input_nodes
 
 	if _pipa_wait_for_nvt_ready 300; then
 		_pipa_kmsg "NT36532 / input path ready"
@@ -91,9 +105,7 @@ halium_hook_setup_touchscreen() {
 
 	if touch="$(_pipa_wait_for_touch_event 300)"; then
 		_pipa_kmsg "touch event ready: $touch"
-		if command -v udevadm >/dev/null 2>&1; then
-			udevadm settle --timeout=10 2>/dev/null || sleep 1
-		fi
+		_pipa_ensure_input_nodes
 	else
 		_pipa_kmsg "touch event node missing; listing input devices:"
 		for namefile in /sys/class/input/input*/name; do
