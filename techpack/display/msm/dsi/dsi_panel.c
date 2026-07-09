@@ -17,6 +17,7 @@
 #include "dsi_mi_feature.h"
 
 #include "dsi_display.h"
+#include "dsi_drm.h"
 #include "sde_dbg.h"
 #include "dsi_mi_feature.h"
 
@@ -5518,6 +5519,10 @@ int dsi_panel_post_unprepare(struct dsi_panel *panel)
 			panel->name, rc);
 		goto error;
 	}
+
+	if (!strcmp(panel->type, "primary"))
+		dsi_drm_prim_panel_mark_off();
+
 error:
 	mutex_unlock(&panel->panel_lock);
 	return rc;

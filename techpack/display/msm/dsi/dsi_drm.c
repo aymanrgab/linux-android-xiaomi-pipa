@@ -43,6 +43,19 @@ static atomic_t prim_panel_is_on;
 static struct wakeup_source *prim_panel_wakelock;
 static bool prim_panel_off_deferred;
 
+void dsi_drm_prim_panel_mark_off(void)
+{
+	if (!atomic_read(&prim_panel_is_on) && !prim_panel_off_deferred)
+		return;
+
+	prim_panel_off_deferred = false;
+	cancel_delayed_work_sync(&prim_panel_work);
+	atomic_set(&prim_panel_is_on, false);
+	if (prim_panel_wakelock)
+		__pm_relax(prim_panel_wakelock);
+}
+EXPORT_SYMBOL(dsi_drm_prim_panel_mark_off);
+
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
 {
@@ -208,7 +221,9 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	if (c_bridge->display->is_prim_display && atomic_read(&prim_panel_is_on) && !mi_cfg->fod_dimlayer_enabled) {
+	if (c_bridge->display->is_prim_display && atomic_read(&prim_panel_is_on) &&
+	    !mi_cfg->fod_dimlayer_enabled &&
+	    dsi_panel_initialized(c_bridge->display->panel)) {
 		cancel_delayed_work_sync(&prim_panel_work);
 		prim_panel_off_deferred = false;
 		__pm_relax(prim_panel_wakelock);
