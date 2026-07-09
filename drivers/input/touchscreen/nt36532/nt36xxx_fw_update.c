@@ -892,6 +892,7 @@ void Boot_Update_Firmware(struct work_struct *work)
 		return;
 	}
 	nvt_get_fw_info();
+	nvt_ts_sync_input_abs();
 	mutex_unlock(&ts->lock);
 	switch_pen_input_device();
 	nvt_ts_boot_fw_complete();

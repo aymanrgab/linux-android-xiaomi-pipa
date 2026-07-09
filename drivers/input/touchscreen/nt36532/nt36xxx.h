@@ -230,8 +230,6 @@ struct nvt_ts_data {
 	bool pen_input_registered;
 	bool pen_input_dev_enable;
 	int8_t pen_phys[32];
-	struct input_dev *key_helper_dev;
-	bool key_helper_active;
 	int result_type;
 	int panel_index;
 #ifdef CONFIG_TOUCHSCREEN_NVT_DEBUG_FS
@@ -318,5 +316,6 @@ extern void nvt_esd_check_enable(uint8_t enable);
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 int switch_pen_input_device(void);
 void nvt_ts_boot_fw_complete(void);
+void nvt_ts_sync_input_abs(void);
 void nvt_ts_boot_fw_failed(void);
 #endif /* _LINUX_NVT_TOUCH_H */

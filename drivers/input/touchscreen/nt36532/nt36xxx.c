@@ -195,14 +195,6 @@ const struct mtk_chip_config spi_ctrdata = {
 #endif
 
 static uint8_t bTouchIsAwake = 0;
-static bool nvt_block_blank_suspend;
-static struct delayed_work nvt_allow_blank_suspend_work;
-
-static void nvt_allow_blank_suspend_work_fn(struct work_struct *work)
-{
-	nvt_block_blank_suspend = false;
-	NVT_LOG("allow blank suspend after splash unlock window\n");
-}
 
 /*******************************************************
 Description:
@@ -1226,13 +1218,25 @@ void nvt_ts_pen_gesture_report(uint8_t pen_gesture_id)
 }
 #endif
 
+void nvt_ts_sync_input_abs(void)
+{
+	if (!ts || !ts->input_dev)
+		return;
+
+#if NVT_SUPER_RESOLUTION_N
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0,
+			     ts->abs_x_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0,
+			     ts->abs_y_max * NVT_SUPER_RESOLUTION_N - 1, 0, 0);
+#else
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_X, 0, ts->abs_x_max - 1, 0, 0);
+	input_set_abs_params(ts->input_dev, ABS_MT_POSITION_Y, 0, ts->abs_y_max - 1, 0, 0);
+#endif
+	NVT_LOG("sync touch abs %ux%u\n", ts->abs_x_max, ts->abs_y_max);
+}
+
 void nvt_ts_boot_fw_complete(void)
 {
-	nvt_block_blank_suspend = true;
-	cancel_delayed_work(&nvt_allow_blank_suspend_work);
-	schedule_delayed_work(&nvt_allow_blank_suspend_work,
-			      msecs_to_jiffies(5 * 60 * 1000));
-
 	if (ts) {
 		flush_workqueue(ts->event_wq);
 		bTouchIsAwake = 1;
@@ -1324,9 +1328,6 @@ static void release_touch_event(void) {
 		input_mt_sync(ts->input_dev);
 #endif
 		input_sync(ts->input_dev);
-
-		if (ts->key_helper_dev)
-			ts->key_helper_active = false;
 	}
 }
 
@@ -1497,7 +1498,7 @@ static int nvt_get_panel_type(struct nvt_ts_data *ts_data)
 		return -EINVAL;
 	}
 
-	for (j = 0; j < 10; j++) {
+	for (j = 0; j < 60; j++) {
 		if (lockdown[1] == 0x42) {
 			i = 0;
 			break;
@@ -1506,9 +1507,6 @@ static int nvt_get_panel_type(struct nvt_ts_data *ts_data)
 			i = 1;
 			break;
 		}
-
-		if (j == 0)
-			break;
 		mdelay(100);
 	}
 	if (i != 0 && i != 1){
@@ -1548,9 +1546,6 @@ void nvt_match_fw(void)
 	NVT_LOG("start match fw name");
 	if (is_lockdown_empty(ts->lockdown_info)) {
 		if (!ts->lkdown_readed) {
-			/* Do not flush lockdown work here: dsi_panel_lockdown_info_read()
-			 * can block during initramfs/cont_splash and stall boot FW update.
-			 */
 			NVT_LOG("lockdown not ready, use default fw\n");
 			ts->fw_name = BOOT_UPDATE_FIRMWARE_NAME;
 			ts->mp_name = MP_UPDATE_FIRMWARE_NAME;
@@ -2030,34 +2025,10 @@ static irqreturn_t nvt_ts_work_func(int irq, void *data)
 	}
 
 	input_report_key(ts->input_dev, BTN_TOUCH, (finger_cnt > 0));
-
-	/* key helper: report KEY_ENTER on touch for boot splash */
-	if (ts->key_helper_dev) {
-		if ((finger_cnt > 0) && !ts->key_helper_active) {
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 1);
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 0);
-			input_sync(ts->key_helper_dev);
-			ts->key_helper_active = true;
-		} else if ((finger_cnt == 0) && ts->key_helper_active) {
-			ts->key_helper_active = false;
-		}
-	}
 #else /* MT_PROTOCOL_B */
 	if (finger_cnt == 0) {
 		input_report_key(ts->input_dev, BTN_TOUCH, 0);
 		input_mt_sync(ts->input_dev);
-	}
-
-	/* key helper: report KEY_ENTER on touch for boot splash */
-	if (ts->key_helper_dev) {
-		if ((finger_cnt > 0) && !ts->key_helper_active) {
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 1);
-			input_report_key(ts->key_helper_dev, KEY_ENTER, 0);
-			input_sync(ts->key_helper_dev);
-			ts->key_helper_active = true;
-		} else if ((finger_cnt == 0) && ts->key_helper_active) {
-			ts->key_helper_active = false;
-		}
 	}
 #endif /* MT_PROTOCOL_B */
 
@@ -3223,27 +3194,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_input_register_device_failed;
 	}
 
-	//---create key helper device for boot splash touch handling---
-	ts->key_helper_dev = input_allocate_device();
-	if (ts->key_helper_dev) {
-		ts->key_helper_dev->name = "nt36xxx-key-helper";
-		ts->key_helper_dev->phys = "input/key_helper";
-		ts->key_helper_dev->id.bustype = BUS_SPI;
-		ts->key_helper_dev->dev.parent = &ts->client->dev;
-		set_bit(EV_KEY, ts->key_helper_dev->evbit);
-		set_bit(KEY_ENTER, ts->key_helper_dev->keybit);
-		set_bit(EV_SYN, ts->key_helper_dev->evbit);
-
-		ret = input_register_device(ts->key_helper_dev);
-		if (ret) {
-			NVT_ERR("register key helper device failed. ret=%d\n", ret);
-			input_free_device(ts->key_helper_dev);
-			ts->key_helper_dev = NULL;
-		}
-	} else {
-		NVT_ERR("allocate key helper device failed\n");
-	}
-
 	if (ts->pen_support) {
 		//---allocate pen input device---
 		ts->pen_input_dev = input_allocate_device();
@@ -3340,9 +3290,8 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_create_nvt_fwu_wq_failed;
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
-	INIT_DELAYED_WORK(&nvt_allow_blank_suspend_work, nvt_allow_blank_suspend_work_fn);
 	// please make sure boot update start after display reset(RESX) sequence, usually ts driver probs after reset is done
-	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(0));
+	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(100));
 #endif
 
 	NVT_LOG("NVT_TOUCH_ESD_PROTECT is %d\n", NVT_TOUCH_ESD_PROTECT);
@@ -3472,10 +3421,6 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 #endif
 
 	bTouchIsAwake = 0;
-	nvt_block_blank_suspend = true;
-	cancel_delayed_work(&nvt_allow_blank_suspend_work);
-	schedule_delayed_work(&nvt_allow_blank_suspend_work,
-			      msecs_to_jiffies(5 * 60 * 1000));
 	NVT_LOG("end (awaiting boot firmware update)\n");
 
 	return 0;
@@ -3530,7 +3475,6 @@ err_create_nvt_esd_check_wq_failed:
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
-		cancel_delayed_work_sync(&nvt_allow_blank_suspend_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3654,7 +3598,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
-		cancel_delayed_work_sync(&nvt_allow_blank_suspend_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3677,11 +3620,6 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 	mutex_destroy(&ts->lock);
 
 	nvt_gpio_deconfig(ts);
-
-	if (ts->key_helper_dev) {
-		input_unregister_device(ts->key_helper_dev);
-		ts->key_helper_dev = NULL;
-	}
 
 	if (ts->pen_support) {
 		if (ts->pen_input_registered) {
@@ -3776,7 +3714,6 @@ static void nvt_ts_shutdown(struct spi_device *client)
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
-		cancel_delayed_work_sync(&nvt_allow_blank_suspend_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3808,11 +3745,6 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	uint32_t i = 0;
 	int enable = 0;
 #endif
-
-	if (nvt_block_blank_suspend) {
-		NVT_LOG("skip suspend during splash/unl0kr window\n");
-		return 0;
-	}
 
 	if (!bTouchIsAwake) {
 		NVT_LOG("Touch is already suspend\n");
@@ -3886,9 +3818,6 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	input_mt_sync(ts->input_dev);
 #endif
 	input_sync(ts->input_dev);
-
-	if (ts->key_helper_dev)
-		ts->key_helper_active = false;
 
 	/* release pen event */
 	release_pen_event();
@@ -4025,10 +3954,6 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned
 		if (event == MI_DRM_PRE_EVENT_BLANK) {
 			if (*blank == MI_DRM_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
-				if (nvt_block_blank_suspend) {
-					NVT_LOG("ignore blank suspend during splash/unl0kr window\n");
-					return 0;
-				}
 				flush_workqueue(ts->event_wq);
 				nvt_ts_suspend(&ts->client->dev);
 			}
@@ -4059,10 +3984,6 @@ static int nvt_drm_notifier_callback(struct notifier_block *self, unsigned long 
 		if (event == MSM_DRM_EARLY_EVENT_BLANK) {
 			if (*blank == MSM_DRM_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
-				if (nvt_block_blank_suspend) {
-					NVT_LOG("ignore blank suspend during splash/unl0kr window\n");
-					return 0;
-				}
 				nvt_ts_suspend(&ts->client->dev);
 			}
 		} else if (event == MSM_DRM_EVENT_BLANK) {
@@ -4087,10 +4008,6 @@ static int nvt_fb_notifier_callback(struct notifier_block *self, unsigned long e
 		blank = evdata->data;
 		if (*blank == FB_BLANK_POWERDOWN) {
 			NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
-			if (nvt_block_blank_suspend) {
-				NVT_LOG("ignore blank suspend during splash/unl0kr window\n");
-				return 0;
-			}
 			nvt_ts_suspend(&ts->client->dev);
 		}
 	} else if (evdata && evdata->data && event == FB_EVENT_BLANK) {
