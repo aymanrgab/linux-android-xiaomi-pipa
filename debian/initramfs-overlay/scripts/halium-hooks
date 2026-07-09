@@ -4,9 +4,21 @@ _pipa_kmsg() {
 	echo "initrd: pipa: $1" >/dev/kmsg 2>/dev/null || true
 }
 
-_pipa_input_name() {
-	[ -f "$1" ] || continue
-	cat "$1" 2>/dev/null
+_pipa_log_input_devices() {
+	for namepath in /sys/class/input/event*/device/name; do
+		[ -f "$namepath" ] || continue
+		evname="$(basename "$(dirname "$(dirname "$namepath")")")"
+		_pipa_kmsg "  input $evname: $(cat "$namepath" 2>/dev/null)"
+	done
+}
+
+_pipa_log_fb_state() {
+	for fb in /sys/class/graphics/fb*; do
+		[ -d "$fb" ] || continue
+		_pipa_kmsg "  $(basename "$fb"): virtual_size=$(cat "$fb/virtual_size" 2>/dev/null) blank=$(cat "$fb/blank" 2>/dev/null)"
+	done
+	[ -c /dev/fb0 ] && _pipa_kmsg "  /dev/fb0 present" || _pipa_kmsg "  /dev/fb0 missing"
+	[ -c /dev/graphics/fb0 ] && _pipa_kmsg "  /dev/graphics/fb0 present" || _pipa_kmsg "  /dev/graphics/fb0 missing"
 }
 
 _pipa_find_touch_event() {
@@ -102,16 +114,16 @@ halium_hook_setup_touchscreen() {
 		_pipa_kmsg "NT36532 wait timed out, continuing"
 	fi
 
+	_pipa_ensure_input_nodes
+
 	if touch="$(_pipa_wait_for_touch_event 300)"; then
 		_pipa_kmsg "touch event ready: $touch"
-		_pipa_ensure_input_nodes
 	else
 		_pipa_kmsg "touch event node missing; listing input devices:"
-		for namepath in /sys/class/input/event*/device/name; do
-			[ -f "$namepath" ] || continue
-			_pipa_kmsg "  $(basename "$(dirname "$(dirname "$namepath")")"): $(cat "$namepath" 2>/dev/null)"
-		done
+		_pipa_log_input_devices
 	fi
+
+	_pipa_log_fb_state
 }
 
 halium_hook_teardown_touchscreen() {

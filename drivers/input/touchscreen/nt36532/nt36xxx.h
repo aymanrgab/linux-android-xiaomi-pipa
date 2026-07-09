@@ -227,6 +227,7 @@ struct nvt_ts_data {
 	uint8_t y_gang_num;
 	uint8_t debug_flag;
 	struct input_dev *pen_input_dev;
+	bool pen_input_registered;
 	bool pen_input_dev_enable;
 	int8_t pen_phys[32];
 	struct input_dev *key_helper_dev;
