@@ -1,0 +1,4 @@
+# Keep the pen off libinput's device scan during unl0kr.
+[NVTCapacitivePen]
+MatchName=NVTCapacitivePen
+AttrIgnore=true

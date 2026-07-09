@@ -5,22 +5,21 @@ _pipa_kmsg() {
 }
 
 _pipa_input_name() {
-	[ -f "$1" ] || return 1
+	[ -f "$1" ] || continue
 	cat "$1" 2>/dev/null
 }
 
 _pipa_find_touch_event() {
-	for namefile in /sys/class/input/input*/name; do
-		[ -f "$namefile" ] || continue
-		name="$(_pipa_input_name "$namefile")" || continue
+	for namepath in /sys/class/input/event*/device/name; do
+		[ -f "$namepath" ] || continue
+		name="$(cat "$namepath" 2>/dev/null)" || continue
 		case "$name" in
 		NVTCapacitiveTouchScreen|NVT-ts|nt36xxx-key-helper)
-			inputdir="$(dirname "$namefile")"
-			for ev in "$inputdir"/event*/uevent; do
-				[ -f "$ev" ] || continue
-				evname="$(basename "$(dirname "$ev")")"
-				[ -c "/dev/input/$evname" ] && echo "/dev/input/$evname $name" && return 0
-			done
+			evname="$(basename "$(dirname "$(dirname "$namepath")")")"
+			if [ -c "/dev/input/$evname" ]; then
+				echo "/dev/input/$evname $name"
+				return 0
+			fi
 			;;
 		esac
 	done
@@ -48,11 +47,8 @@ _pipa_wait_for_nvt_ready() {
 	i=0
 
 	while [ "$i" -lt "$max_wait" ]; do
-		if dmesg 2>/dev/null | grep -qE 'boot firmware ready, touch active|NVT-ts.*end \(awaiting boot firmware update\)|NVTCapacitiveTouchScreen'; then
-			if dmesg 2>/dev/null | grep -q 'boot firmware ready, touch active'; then
-				return 0
-			fi
-			# Pre-1.06 kernels never log the ready string; keep waiting for event node.
+		if dmesg 2>/dev/null | grep -q 'boot firmware ready, touch active'; then
+			return 0
 		fi
 		if _pipa_find_touch_event >/dev/null 2>&1; then
 			return 0
@@ -70,10 +66,14 @@ _pipa_wake_display() {
 		echo 0 > "$blank" 2>/dev/null || true
 	done
 
-	for status in /sys/class/drm/card*/status; do
-		[ -f "$status" ] || continue
-		echo on > "$status" 2>/dev/null || true
-	done
+	if [ -e /dev/graphics/fb0 ] && [ ! -e /dev/fb0 ]; then
+		ln -sf /dev/graphics/fb0 /dev/fb0 2>/dev/null || true
+	fi
+
+	if [ -w /dev/fb0 ]; then
+		# Best-effort unblank for fbdev/unl0kr; ignore if unsupported.
+		true
+	fi
 }
 
 _pipa_ensure_input_nodes() {
@@ -81,7 +81,6 @@ _pipa_ensure_input_nodes() {
 
 	if command -v udevadm >/dev/null 2>&1; then
 		udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
-		udevadm trigger --subsystem-match=graphics --action=add 2>/dev/null || true
 		udevadm settle --timeout=5 2>/dev/null || true
 	fi
 
@@ -98,7 +97,7 @@ halium_hook_setup_touchscreen() {
 	_pipa_ensure_input_nodes
 
 	if _pipa_wait_for_nvt_ready 300; then
-		_pipa_kmsg "NT36532 / input path ready"
+		_pipa_kmsg "NT36532 boot firmware / touch ready"
 	else
 		_pipa_kmsg "NT36532 wait timed out, continuing"
 	fi
@@ -108,9 +107,9 @@ halium_hook_setup_touchscreen() {
 		_pipa_ensure_input_nodes
 	else
 		_pipa_kmsg "touch event node missing; listing input devices:"
-		for namefile in /sys/class/input/input*/name; do
-			[ -f "$namefile" ] || continue
-			_pipa_kmsg "  input: $(cat "$namefile" 2>/dev/null)"
+		for namepath in /sys/class/input/event*/device/name; do
+			[ -f "$namepath" ] || continue
+			_pipa_kmsg "  $(basename "$(dirname "$(dirname "$namepath")")"): $(cat "$namepath" 2>/dev/null)"
 		done
 	fi
 }
