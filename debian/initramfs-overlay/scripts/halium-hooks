@@ -1,0 +1,108 @@
+# Initramfs hooks for Xiaomi Pad 6 (pipa)
+
+_pipa_kmsg() {
+	echo "initrd: pipa: $1" >/dev/kmsg 2>/dev/null || true
+}
+
+_pipa_input_name() {
+	[ -f "$1" ] || return 1
+	cat "$1" 2>/dev/null
+}
+
+_pipa_find_touch_event() {
+	for namefile in /sys/class/input/input*/name; do
+		[ -f "$namefile" ] || continue
+		name="$(_pipa_input_name "$namefile")" || continue
+		case "$name" in
+		NVTCapacitiveTouchScreen|NVT-ts|nt36xxx-key-helper)
+			inputdir="$(dirname "$namefile")"
+			for ev in "$inputdir"/event*/uevent; do
+				[ -f "$ev" ] || continue
+				evname="$(basename "$(dirname "$ev")")"
+				[ -c "/dev/input/$evname" ] && echo "/dev/input/$evname $name" && return 0
+			done
+			;;
+		esac
+	done
+	return 1
+}
+
+_pipa_wait_for_touch_event() {
+	max_wait="${1:-300}"
+	i=0
+
+	while [ "$i" -lt "$max_wait" ]; do
+		if touch="$(_pipa_find_touch_event)"; then
+			echo "$touch"
+			return 0
+		fi
+		sleep 0.1
+		i=$((i + 1))
+	done
+
+	return 1
+}
+
+_pipa_wait_for_nvt_ready() {
+	max_wait="${1:-300}"
+	i=0
+
+	while [ "$i" -lt "$max_wait" ]; do
+		if dmesg 2>/dev/null | grep -qE 'boot firmware ready, touch active|NVT-ts.*end \(awaiting boot firmware update\)|NVTCapacitiveTouchScreen'; then
+			if dmesg 2>/dev/null | grep -q 'boot firmware ready, touch active'; then
+				return 0
+			fi
+			# Pre-1.06 kernels never log the ready string; keep waiting for event node.
+		fi
+		if _pipa_find_touch_event >/dev/null 2>&1; then
+			return 0
+		fi
+		sleep 0.1
+		i=$((i + 1))
+	done
+
+	return 1
+}
+
+_pipa_wake_display() {
+	for blank in /sys/class/graphics/fb*/blank; do
+		[ -w "$blank" ] || continue
+		echo 0 > "$blank" 2>/dev/null || true
+	done
+}
+
+halium_hook_setup_touchscreen() {
+	_pipa_kmsg "preparing touchscreen for unl0kr"
+
+	_pipa_wake_display
+
+	mkdir -p /dev/input /dev/graphics 2>/dev/null || true
+
+	if command -v udevadm >/dev/null 2>&1; then
+		udevadm trigger --subsystem-match=input --action=add 2>/dev/null || true
+		udevadm trigger --subsystem-match=graphics --action=add 2>/dev/null || true
+	fi
+
+	if _pipa_wait_for_nvt_ready 300; then
+		_pipa_kmsg "NT36532 / input path ready"
+	else
+		_pipa_kmsg "NT36532 wait timed out, continuing"
+	fi
+
+	if touch="$(_pipa_wait_for_touch_event 300)"; then
+		_pipa_kmsg "touch event ready: $touch"
+		if command -v udevadm >/dev/null 2>&1; then
+			udevadm settle --timeout=10 2>/dev/null || sleep 1
+		fi
+	else
+		_pipa_kmsg "touch event node missing; listing input devices:"
+		for namefile in /sys/class/input/input*/name; do
+			[ -f "$namefile" ] || continue
+			_pipa_kmsg "  input: $(cat "$namefile" 2>/dev/null)"
+		done
+	fi
+}
+
+halium_hook_teardown_touchscreen() {
+	:
+}

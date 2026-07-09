@@ -193,6 +193,14 @@ const struct mtk_chip_config spi_ctrdata = {
 #endif
 
 static uint8_t bTouchIsAwake = 0;
+static bool nvt_block_blank_suspend;
+static struct delayed_work nvt_allow_blank_suspend_work;
+
+static void nvt_allow_blank_suspend_work_fn(struct work_struct *work)
+{
+	nvt_block_blank_suspend = false;
+	NVT_LOG("allow blank suspend after splash unlock window\n");
+}
 
 /*******************************************************
 Description:
@@ -1220,6 +1228,10 @@ void nvt_ts_boot_fw_complete(void)
 {
 	bTouchIsAwake = 1;
 	nvt_irq_enable(true);
+	nvt_block_blank_suspend = true;
+	cancel_delayed_work(&nvt_allow_blank_suspend_work);
+	schedule_delayed_work(&nvt_allow_blank_suspend_work,
+			      msecs_to_jiffies(5 * 60 * 1000));
 	NVT_LOG("boot firmware ready, touch active\n");
 }
 
@@ -3307,6 +3319,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 		goto err_create_nvt_fwu_wq_failed;
 	}
 	INIT_DELAYED_WORK(&ts->nvt_fwu_work, Boot_Update_Firmware);
+	INIT_DELAYED_WORK(&nvt_allow_blank_suspend_work, nvt_allow_blank_suspend_work_fn);
 	// please make sure boot update start after display reset(RESX) sequence, usually ts driver probs after reset is done
 	queue_delayed_work(nvt_fwu_wq, &ts->nvt_fwu_work, msecs_to_jiffies(0));
 #endif
@@ -3492,6 +3505,7 @@ err_create_nvt_esd_check_wq_failed:
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_delayed_work_sync(&nvt_allow_blank_suspend_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3616,6 +3630,7 @@ static int32_t nvt_ts_remove(struct spi_device *client)
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_delayed_work_sync(&nvt_allow_blank_suspend_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3733,6 +3748,7 @@ static void nvt_ts_shutdown(struct spi_device *client)
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
 		cancel_delayed_work_sync(&ts->nvt_fwu_work);
+		cancel_delayed_work_sync(&nvt_allow_blank_suspend_work);
 		destroy_workqueue(nvt_fwu_wq);
 		nvt_fwu_wq = NULL;
 	}
@@ -3764,6 +3780,11 @@ static int32_t nvt_ts_suspend(struct device *dev)
 	uint32_t i = 0;
 	int enable = 0;
 #endif
+
+	if (nvt_block_blank_suspend) {
+		NVT_LOG("skip suspend during splash/unl0kr window\n");
+		return 0;
+	}
 
 	if (!bTouchIsAwake) {
 		NVT_LOG("Touch is already suspend\n");
@@ -3986,6 +4007,10 @@ static int nvt_drm_panel_notifier_callback(struct notifier_block *self, unsigned
 		if (event == MI_DRM_PRE_EVENT_BLANK) {
 			if (*blank == MI_DRM_BLANK_POWERDOWN) {
 				NVT_LOG("event=%lu, *blank=%d\n", event, *blank);
+				if (nvt_block_blank_suspend) {
+					NVT_LOG("ignore blank suspend during splash/unl0kr window\n");
+					return 0;
+				}
 				flush_workqueue(ts->event_wq);
 				nvt_ts_suspend(&ts->client->dev);
 			}
