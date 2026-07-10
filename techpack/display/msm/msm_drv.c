@@ -1245,8 +1245,15 @@ static void msm_lastclose(struct drm_device *dev)
 			disable_timer->function(disable_timer);
 	}
 
+	/* #region agent log */
+	pr_info("DBG54b041 H-B msm_lastclose: before flush_workqueue pending_crtcs=0x%x pending_planes=0x%x\n",
+		priv->pending_crtcs, priv->pending_planes);
+	/* #endregion */
 	/* wait for pending vblank requests to be executed by worker thread */
 	flush_workqueue(priv->wq);
+	/* #region agent log */
+	pr_info("DBG54b041 H-B msm_lastclose: after flush_workqueue\n");
+	/* #endregion */
 
 	/*
 	 * Never call drm_fb_helper_restore_fbdev_mode_unlocked(): on pipa that
@@ -1261,7 +1268,14 @@ retry:
 	if (rc)
 		goto fail;
 
+	/* #region agent log */
+	pr_info("DBG54b041 H-C msm_lastclose: before msm_disable_all_modes\n");
+	/* #endregion */
 	rc = msm_disable_all_modes(dev, &ctx);
+	/* #region agent log */
+	pr_info("DBG54b041 H-C msm_lastclose: after msm_disable_all_modes rc=%d\n",
+		rc);
+	/* #endregion */
 	if (rc)
 		goto fail;
 
@@ -1277,6 +1291,9 @@ fail:
 	}
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
+	/* #region agent log */
+	pr_info("DBG54b041 H-B msm_lastclose: done rc=%d\n", rc);
+	/* #endregion */
 }
 
 static irqreturn_t msm_irq(int irq, void *arg)

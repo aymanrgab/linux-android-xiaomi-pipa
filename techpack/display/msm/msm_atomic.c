@@ -24,6 +24,11 @@
 
 #define MULTIPLE_CONN_DETECTED(x) (x > 1)
 
+/* Unbounded wait here wedges msm_drm workers; lastclose flush_workqueue
+ * then sleeps uninterruptibly and Phosh restart never reaches sys_reboot.
+ */
+#define MSM_ATOMIC_PENDING_TIMEOUT_MS	3000
+
 struct msm_commit {
 	struct drm_device *dev;
 	struct drm_atomic_state *state;
@@ -709,18 +714,58 @@ retry:
 
 	/*
 	 * Wait for pending updates on any of the same crtc's and then
-	 * mark our set of crtc's as busy:
+	 * mark our set of crtc's as busy.
+	 *
+	 * Must be bounded: workqueue contexts ignore signals, so an
+	 * interruptible wait can still block forever. That leaves
+	 * pending bits stuck and msm_lastclose's flush_workqueue in D
+	 * state through Phosh restart (see pstore: blank completes,
+	 * never "Going down for restart").
 	 */
-
-	/* Start Atomic */
+	/* #region agent log */
+	pr_info("DBG54b041 H-A msm_atomic: wait pending crtcs=0x%x planes=0x%x want_c=0x%x want_p=0x%x nonblock=%d\n",
+		priv->pending_crtcs, priv->pending_planes,
+		c->crtc_mask, c->plane_mask, nonblock);
+	/* #endregion */
 	spin_lock(&priv->pending_crtcs_event.lock);
-	ret = wait_event_interruptible_locked(priv->pending_crtcs_event,
+	ret = 0;
+	while ((priv->pending_crtcs & c->crtc_mask) ||
+	       (priv->pending_planes & c->plane_mask)) {
+		long remaining;
+
+		spin_unlock(&priv->pending_crtcs_event.lock);
+		remaining = wait_event_interruptible_timeout(
+			priv->pending_crtcs_event,
 			!(priv->pending_crtcs & c->crtc_mask) &&
-			!(priv->pending_planes & c->plane_mask));
+			!(priv->pending_planes & c->plane_mask),
+			msecs_to_jiffies(MSM_ATOMIC_PENDING_TIMEOUT_MS));
+		spin_lock(&priv->pending_crtcs_event.lock);
+
+		if (remaining < 0) {
+			ret = remaining;
+			break;
+		}
+		if (remaining == 0) {
+			/* #region agent log */
+			pr_err("DBG54b041 H-A msm_atomic: TIMEOUT pending_crtcs=0x%x pending_planes=0x%x want_c=0x%x want_p=0x%x clearing stuck bits\n",
+				priv->pending_crtcs, priv->pending_planes,
+				c->crtc_mask, c->plane_mask);
+			/* #endregion */
+			priv->pending_crtcs &= ~c->crtc_mask;
+			priv->pending_planes &= ~c->plane_mask;
+			wake_up_all_locked(&priv->pending_crtcs_event);
+			ret = -ETIMEDOUT;
+			break;
+		}
+	}
 	if (ret == 0) {
 		DBG("start: %08x", c->crtc_mask);
 		priv->pending_crtcs |= c->crtc_mask;
 		priv->pending_planes |= c->plane_mask;
+		/* #region agent log */
+		pr_info("DBG54b041 H-A msm_atomic: acquired pending crtcs=0x%x planes=0x%x\n",
+			priv->pending_crtcs, priv->pending_planes);
+		/* #endregion */
 	}
 	spin_unlock(&priv->pending_crtcs_event.lock);
 
