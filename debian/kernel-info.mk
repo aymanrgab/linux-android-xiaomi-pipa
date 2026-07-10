@@ -10,19 +10,7 @@ KERNEL_BASE_VERSION = 4.19.325
 
 # The kernel cmdline to use
 # Match the Android device tree for pipa, then append Droidian-specific bits.
-KERNEL_BOOTIMAGE_CMDLINE = ramoops_memreserve=4M msm_drm.vram=64M \
-                            androidboot.hardware=qcom \
-                            androidboot.console=ttyMSM0 \
-                            androidboot.memcg=1 \
-                            lpm_levels.sleep_disabled=1 \
-                            msm_rtb.filter=0x237 \
-                            service_locator.enable=1 \
-                            androidboot.usbcontroller=a600000.dwc3 \
-                            swiotlb=2048 loop.max_part=7 \
-                            cgroup.memory=nokmem,nosocket reboot=panic_warm \
-                            androidboot.fstab_suffix=qcom \
-                            androidboot.init_fatal_reboot_target=recovery \
-                            androidboot.selinux=permissive \
+KERNEL_BOOTIMAGE_CMDLINE = ramoops_memreserve=4M \
                             droidian.lvm.prefer
 
 # Slug for the device vendor.
