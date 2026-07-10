@@ -43,6 +43,19 @@ static atomic_t prim_panel_is_on;
 static struct wakeup_source *prim_panel_wakelock;
 static bool prim_panel_off_deferred;
 
+void dsi_drm_prim_panel_mark_off(void)
+{
+	if (!atomic_read(&prim_panel_is_on) && !prim_panel_off_deferred)
+		return;
+
+	prim_panel_off_deferred = false;
+	cancel_delayed_work_sync(&prim_panel_work);
+	atomic_set(&prim_panel_is_on, false);
+	if (prim_panel_wakelock)
+		__pm_relax(prim_panel_wakelock);
+}
+EXPORT_SYMBOL(dsi_drm_prim_panel_mark_off);
+
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
 {
@@ -208,25 +221,15 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		return;
 	}
 
-	if (c_bridge->display->is_prim_display && atomic_read(&prim_panel_is_on) && !mi_cfg->fod_dimlayer_enabled) {
+	/*
+	 * Cancel any leftover deferred blank work, but always continue into
+	 * full prepare/enable. Skipping enable on video-mode panels (FPC
+	 * fast path) leaves ktz8866 backlight off after deep suspend.
+	 */
+	if (c_bridge->display->is_prim_display) {
 		cancel_delayed_work_sync(&prim_panel_work);
 		prim_panel_off_deferred = false;
 		__pm_relax(prim_panel_wakelock);
-
-		power_mode = MI_DRM_BLANK_UNBLANK;
-		notify_data.data = &power_mode;
-		notify_data.id = MSM_DRM_PRIMARY_DISPLAY;
-		mi_drm_notifier_call_chain(MI_DRM_EARLY_EVENT_BLANK, &notify_data);
-		mi_drm_notifier_call_chain(MI_DRM_EVENT_BLANK, &notify_data);
-
-		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
-			DSI_INFO("skip set display config for video panel in fpc\n");
-			return;
-		} else if (c_bridge->display->panel->panel_mode == DSI_OP_CMD_MODE &&
-		    c_bridge->dsi_mode.dsi_mode_flags != DSI_MODE_FLAG_DMS) {
-			DSI_INFO("skip set display config because timming not switch for command panel\n");
-			return;
-		}
 	}
 
 	if (mi_cfg->fod_dimlayer_enabled) {
@@ -384,14 +387,7 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 
 	mi_cfg = &c_bridge->display->panel->mi_cfg;
 
-	if (c_bridge->display->is_prim_display && !prim_panel_off_deferred
-			&& !mi_cfg->fod_dimlayer_enabled) {
-		prim_panel_off_deferred = true;
-		__pm_stay_awake(prim_panel_wakelock);
-		schedule_delayed_work(&prim_panel_work,
-				msecs_to_jiffies(5000));
-		return;
-	}
+	/* Power down immediately — do not defer blank for 5s (FPC path). */
 	prim_panel_off_deferred = false;
 
 	if (mi_cfg->fod_dimlayer_enabled) {
@@ -442,7 +438,7 @@ static void prim_panel_off_delayed_work(struct work_struct *work)
 		return;
 	}
 	mutex_unlock(&gbridge->base.lock);
-} // git
+}
 
 static void dsi_bridge_mode_set(struct drm_bridge *bridge,
 				struct drm_display_mode *mode,

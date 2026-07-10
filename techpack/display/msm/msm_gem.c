@@ -417,6 +417,18 @@ put_iova(struct drm_gem_object *obj)
 	WARN_ON(!mutex_is_locked(&msm_obj->lock));
 
 	list_for_each_entry_safe(vma, tmp, &msm_obj->vmas, list) {
+		/*
+		 * Cont-splash GEM objects pin a bootloader physical address
+		 * without drm_mm insert / IOMMU map. Unmapping would call
+		 * drm_mm_remove_node on an unallocated node.
+		 */
+		if (msm_obj->flags & MSM_BO_CONT_SPLASH) {
+			vma->iova = 0;
+			msm_obj->aspace = vma->aspace;
+			del_vma(vma);
+			continue;
+		}
+
 		msm_gem_unmap_vma(vma->aspace, vma, msm_obj->sgt,
 				msm_obj->flags);
 		/*

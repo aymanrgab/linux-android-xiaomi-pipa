@@ -27,6 +27,7 @@
 extern int msm_gem_mmap_obj(struct drm_gem_object *obj,
 					struct vm_area_struct *vma);
 static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma);
+static int msm_fbdev_blank(int blank, struct fb_info *info);
 
 /*
  * fbdev funcs, to implement legacy fbdev interface on top of drm driver
@@ -41,8 +42,14 @@ struct msm_fbdev {
 
 static struct fb_ops msm_fb_ops = {
 	.owner = THIS_MODULE,
-	DRM_FB_HELPER_DEFAULT_OPS,
-
+	.fb_check_var = drm_fb_helper_check_var,
+	.fb_set_par = drm_fb_helper_set_par,
+	.fb_setcmap = drm_fb_helper_setcmap,
+	.fb_blank = msm_fbdev_blank,
+	.fb_pan_display = drm_fb_helper_pan_display,
+	.fb_debug_enter = drm_fb_helper_debug_enter,
+	.fb_debug_leave = drm_fb_helper_debug_leave,
+	.fb_ioctl = drm_fb_helper_ioctl,
 	.fb_fillrect = drm_fb_helper_cfb_fillrect,
 	.fb_copyarea = drm_fb_helper_cfb_copyarea,
 	.fb_imageblit = drm_fb_helper_cfb_imageblit,
@@ -63,6 +70,26 @@ static int msm_fbdev_mmap(struct fb_info *info, struct vm_area_struct *vma)
 	}
 
 	return msm_gem_mmap_obj(bo, vma);
+}
+
+/*
+ * While fb0 mirrors live cont_splash, drm_fb_helper_blank →
+ * restore_fbdev_mode_atomic is unsafe on dual-DSI video panels (plane89
+ * spam / WARNINGs). Accept blank/DPMS as a no-op until splash is gone.
+ */
+static int msm_fbdev_blank(int blank, struct fb_info *info)
+{
+	struct drm_fb_helper *helper = info->par;
+	struct msm_drm_private *priv;
+
+	if (!helper || !helper->dev || !helper->dev->dev_private)
+		return -ENODEV;
+
+	priv = helper->dev->dev_private;
+	if (priv->fbdev_cont_splash)
+		return 0;
+
+	return drm_fb_helper_blank(blank, info);
 }
 
 static int msm_fbdev_create(struct drm_fb_helper *helper,

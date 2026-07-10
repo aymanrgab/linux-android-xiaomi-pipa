@@ -149,4 +149,11 @@ u64 dsi_drm_find_bit_clk_rate(void *display,
 int dsi_conn_prepare_commit(void *display,
 		struct msm_display_conn_params *params);
 
+/**
+ * dsi_drm_prim_panel_mark_off - clear stale FPC panel-on state
+ *
+ * Call when entering LP1/LP2 so a later wake always runs full enable.
+ */
+void dsi_drm_prim_panel_mark_off(void);
+
 #endif /* _DSI_DRM_H_ */
