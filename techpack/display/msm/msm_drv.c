@@ -77,14 +77,13 @@ static struct notifier_block msm_drm_reboot_nb;
 static int msm_drm_reboot_notify(struct notifier_block *nb,
 		unsigned long code, void *cmd)
 {
-	struct msm_drm_private *priv;
-
-	if (!msm_primary_ddev || !msm_primary_ddev->dev_private)
-		return NOTIFY_DONE;
-
-	priv = msm_primary_ddev->dev_private;
-	priv->shutdown_in_progress = true;
-
+	/*
+	 * Setting shutdown_in_progress here is too early — it prevents
+	 * msm_lastclose from cleanly disabling the display via atomic
+	 * modeset when the DRM fd is closed during process exit.  The
+	 * flag is set in msm_pdev_shutdown only after the display has
+	 * been torn down.
+	 */
 	return NOTIFY_DONE;
 }
 
@@ -2278,9 +2277,17 @@ static void msm_pdev_shutdown(struct platform_device *pdev)
 		return;
 	}
 
-	priv->shutdown_in_progress = true;
-
+	/*
+	 * Tear down the display via the normal atomic modeset path first.
+	 * shutdown_in_progress must NOT be set yet, otherwise
+	 * msm_lastclose→msm_disable_all_modes→msm_atomic_commit will bail
+	 * with -EINVAL and leave the MDSS hardware in a live state that
+	 * can hang on wait_for_completion during warm reboot.
+	 */
 	msm_lastclose(ddev);
+
+	/* Now safe to block any residual atomic commits */
+	priv->shutdown_in_progress = true;
 }
 
 static const struct of_device_id dt_match[] = {
