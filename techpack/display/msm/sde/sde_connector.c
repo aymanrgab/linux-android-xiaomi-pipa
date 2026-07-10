@@ -104,25 +104,15 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 			(bd->props.state & BL_CORE_SUSPENDED))
 		brightness = 0;
 
-	if (brightness > display->panel->bl_config.brightness_max_level)
-		brightness = display->panel->bl_config.brightness_max_level;
+	if (brightness > display->panel->bl_config.bl_max_level)
+		brightness = display->panel->bl_config.bl_max_level;
 
-	/*
-	 * Map sysfs/UI brightness (0..brightness_max_level) into the
-	 * hardware backlight level (0..bl_max_level).
-	 *
-	 * Do not clamp the divisor to 255: on Droidian/Phosh the backlight
-	 * class exposes the full DT range (e.g. 4095). Treating that as a
-	 * 0-255 Android HAL value overflows bl_lvl past ktz8866's max and
-	 * makes set_backlight fail for anything above ~6%, which also leaves
-	 * the panel dark after blank/unblank.
+	/* map UI brightness into driver backlight level with rounding
+	 * The Android Lights HAL encodes brightness as 8-bit ARGB,
+	 * so cap brightness_max_level at 255 to ensure proper scaling.
 	 */
-	if (!display->panel->bl_config.brightness_max_level)
-		bl_lvl = brightness;
-	else
-		bl_lvl = mult_frac(brightness,
-				display->panel->bl_config.bl_max_level,
-				display->panel->bl_config.brightness_max_level);
+	bl_lvl = mult_frac(brightness, display->panel->bl_config.bl_max_level,
+			min_t(u32, display->panel->bl_config.brightness_max_level, 255));
 
 	if (!bl_lvl && brightness)
 		bl_lvl = 1;

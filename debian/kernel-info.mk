@@ -102,7 +102,9 @@ FLASH_INFO_MANUFACTURER = Xiaomi
 FLASH_INFO_MODEL = 23043RP34G
 
 # Device CPU. This will be grepped against /proc/cpuinfo.
-FLASH_INFO_CPU = Qualcomm Technologies, Inc SM8250 (Snapdragon 870)
+# Must match /proc/cpuinfo "Hardware" exactly — flash-bootimage greps this
+# when Halium/getprop is unavailable (e.g. PackageKit offline update).
+FLASH_INFO_CPU = Qualcomm Technologies, Inc SM8250
 
 # Space-separated list of supported device ids as reported by fastboot
 FLASH_INFO_DEVICE_IDS = pipa
