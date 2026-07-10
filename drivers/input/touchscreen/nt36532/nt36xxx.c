@@ -3883,28 +3883,9 @@ static int32_t nvt_ts_resume(struct device *dev)
 				nvt_update_firmware(ts->fw_name);
 			}
 		} else {
-			uint8_t prev_ver = ts->fw_ver;
-			bool skip_download = false;
-
-			/*
-			 * Gesture suspend leaves host-download FW in SRAM; deep
-			 * sleep does not. Restart the retained image, then skip
-			 * the ~200ms reflash only if it reaches REK and reports
-			 * the same version that was running before suspend.
-			 */
-			if (ts->db_wakeup && prev_ver) {
-				nvt_bootloader_reset();
-				if (!nvt_check_fw_reset_state(RESET_STATE_REK) &&
-				    !nvt_get_fw_info() && ts->fw_ver == prev_ver) {
-					skip_download = true;
-					NVT_LOG("resume: FW ver 0x%02X intact, skip download\n",
-						ts->fw_ver);
-				}
-			}
-
-			if (!skip_download && nvt_update_firmware(ts->fw_name)) {
+			if (nvt_update_firmware(ts->fw_name)) {
 				NVT_ERR("download firmware failed, ignore check fw state\n");
-			} else if (!skip_download) {
+			} else {
 				nvt_check_fw_reset_state(RESET_STATE_REK);
 			}
 		}
