@@ -721,6 +721,9 @@ struct msm_drm_private {
 	struct msm_idle idle;
 };
 
+/* True once reboot/poweroff notifier or platform shutdown has started. */
+bool msm_drm_shutdown_in_progress(void);
+
 /* get struct msm_kms * from drm_device * */
 #define ddev_to_msm_kms(D) ((D) && (D)->dev_private ? \
 		((struct msm_drm_private *)((D)->dev_private))->kms : NULL)

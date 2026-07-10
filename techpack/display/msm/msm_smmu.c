@@ -400,7 +400,10 @@ static int msm_smmu_fault_handler(struct iommu_domain *domain,
 		int flags, void *token)
 {
 	struct msm_smmu_client *client;
-	int rc = -EINVAL;
+	static atomic_t fault_count;
+	static unsigned long last_iova;
+	static int last_flags;
+	unsigned int n;
 
 	if (!token) {
 		DRM_ERROR("Error: token is NULL\n");
@@ -409,16 +412,34 @@ static int msm_smmu_fault_handler(struct iommu_domain *domain,
 
 	client = (struct msm_smmu_client *)token;
 
-	/* see iommu.h for fault flags definition */
-	SDE_EVT32(iova, flags);
-	DRM_ERROR("trigger dump, iova=0x%08lx, flags=0x%x\n", iova, flags);
-	DRM_ERROR("SMMU device:%s", client->dev ? client->dev->kobj.name : "");
+	/*
+	 * During Phosh/update reboot the compositor unmaps scanout buffers
+	 * while MDSS may still be scanning them. Logging every fault fills
+	 * pstore and soft-locks the reboot path — rate-limit hard.
+	 */
+	if (msm_drm_shutdown_in_progress())
+		return 0;
+
+	n = atomic_inc_return(&fault_count);
+	if (n <= 5 || (n % 1024) == 0) {
+		/* see iommu.h for fault flags definition */
+		SDE_EVT32(iova, flags);
+		DRM_ERROR("trigger dump, iova=0x%08lx, flags=0x%x count=%u\n",
+				iova, flags, n);
+		DRM_ERROR("SMMU device:%s",
+				client->dev ? client->dev->kobj.name : "");
+	} else if (iova != last_iova || flags != last_flags) {
+		last_iova = iova;
+		last_flags = flags;
+		DRM_ERROR("SMMU fault iova=0x%08lx flags=0x%x count=%u\n",
+				iova, flags, n);
+	}
 
 	/*
-	 * return -ENOSYS to allow smmu driver to dump out useful
-	 * debug info.
+	 * Return 0 after the first few faults so the IOMMU core does not
+	 * keep dumping while MDSS retries the same unmapped IOVA.
 	 */
-	return rc;
+	return (n <= 5) ? -EINVAL : 0;
 }
 
 /**

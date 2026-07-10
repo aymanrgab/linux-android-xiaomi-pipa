@@ -101,6 +101,18 @@ static void msm_drm_reboot_notify_unregister(void)
 	msm_primary_ddev = NULL;
 }
 
+bool msm_drm_shutdown_in_progress(void)
+{
+	struct msm_drm_private *priv;
+
+	if (!msm_primary_ddev || !msm_primary_ddev->dev_private)
+		return false;
+
+	priv = msm_primary_ddev->dev_private;
+	return priv->shutdown_in_progress;
+}
+EXPORT_SYMBOL(msm_drm_shutdown_in_progress);
+
 static void msm_fb_output_poll_changed(struct drm_device *dev)
 {
 	struct msm_drm_private *priv = NULL;
@@ -1237,13 +1249,12 @@ static void msm_lastclose(struct drm_device *dev)
 	/* wait for pending vblank requests to be executed by worker thread */
 	flush_workqueue(priv->wq);
 
-	if (priv->fbdev) {
-		/*
-		 * Never restore fbdev mode on lastclose: atomic restore blocks
-		 * indefinitely on pipa cont_splash and breaks minui reboot.
-		 */
-		return;
-	}
+	/*
+	 * Never call drm_fb_helper_restore_fbdev_mode_unlocked(): on pipa that
+	 * atomic restore hangs with cont_splash. Still fall through to disable
+	 * CRTCs once splash is gone so Phosh/update reboot can unmap buffers
+	 * without an MDSS SMMU fault storm.
+	 */
 
 	drm_modeset_acquire_init(&ctx, 0);
 retry:
