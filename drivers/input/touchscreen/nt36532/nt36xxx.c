@@ -3689,80 +3689,29 @@ static void nvt_ts_shutdown(struct spi_device *client)
 
 	nvt_irq_enable(false);
 
+	/*
+	 * Never cancel_*_sync() or destroy_workqueue() here. Workers can be
+	 * blocked on display/SPI while cont_splash is still live; waiting
+	 * stalls device_shutdown so msm-poweroff never runs (Plymouth and
+	 * software-update reboot hang with charger IRQs still ticking).
+	 */
 #if NVT_TOUCH_ESD_PROTECT
 	if (nvt_esd_check_wq) {
-		cancel_delayed_work_sync(&nvt_esd_check_work);
+		cancel_delayed_work(&nvt_esd_check_work);
 		nvt_esd_check_enable(false);
 	}
 #endif /* #if NVT_TOUCH_ESD_PROTECT */
 
-	if (nvt_lockdown_wq) {
-		cancel_delayed_work_sync(&ts->nvt_lockdown_work);
-		destroy_workqueue(nvt_lockdown_wq);
-		nvt_lockdown_wq = NULL;
-	}
+	if (nvt_lockdown_wq)
+		cancel_delayed_work(&ts->nvt_lockdown_work);
 #if BOOT_UPDATE_FIRMWARE
 	if (nvt_fwu_wq) {
-		cancel_delayed_work_sync(&ts->nvt_fwu_work);
-		cancel_work_sync(&ts->nvt_panel_fw_correct_work);
-		destroy_workqueue(nvt_fwu_wq);
-		nvt_fwu_wq = NULL;
+		cancel_delayed_work(&ts->nvt_fwu_work);
+		cancel_work(&ts->nvt_panel_fw_correct_work);
 	}
 #endif
-
-	if (ts->event_wq) {
-		cancel_work_sync(&ts->resume_work);
-		destroy_workqueue(ts->event_wq);
-		ts->event_wq = NULL;
-	}
-
-#if CONFIG_TOUCHSCREEN_XIAOMI_TOUCHFEATURE
-	if (ts->set_touchfeature_wq)
-		destroy_workqueue(ts->set_touchfeature_wq);
-#endif
-
-#if defined(CONFIG_DRM_PANEL)
-	if (active_panel) {
-		if (mi_drm_unregister_client(&ts->drm_panel_notif))
-			NVT_ERR("Error occurred while unregistering drm_panel_notifier.\n");
-	}
-#elif defined(_MSM_DRM_NOTIFY_H_)
-	if (msm_drm_unregister_client(&ts->drm_notif))
-		NVT_ERR("Error occurred while unregistering drm_notifier.\n");
-#elif defined(CONFIG_FB)
-	if (fb_unregister_client(&ts->fb_notif))
-		NVT_ERR("Error occurred while unregistering fb_notifier.\n");
-#elif defined(CONFIG_HAS_EARLYSUSPEND)
-	unregister_early_suspend(&ts->early_suspend);
-#endif
-
-#if NVT_TOUCH_MP
-	nvt_mp_proc_deinit();
-#endif
-#if NVT_TOUCH_EXT_PROC
-	nvt_extra_proc_deinit();
-#endif
-#if NVT_TOUCH_PROC
-	nvt_flash_proc_deinit();
-#endif
-
-#if defined(NVT_PEN_CONNECT_STRATEGY)
-	if (pen_charge_state_notifier_unregister_client(&ts->pen_charge_state_notifier))
-		NVT_ERR("Error occurred while unregistering pen status switch state notifier.\n");
-#endif
-
-#if NVT_TOUCH_ESD_PROTECT
-	if (nvt_esd_check_wq) {
-		destroy_workqueue(nvt_esd_check_wq);
-		nvt_esd_check_wq = NULL;
-	}
-#endif /* #if NVT_TOUCH_ESD_PROTECT */
-
-#if WAKEUP_GESTURE
-	device_init_wakeup(&ts->input_dev->dev, 0);
-#endif
-
-	mutex_destroy(&ts->pen_switch_lock);
+	if (ts->event_wq)
+		cancel_work(&ts->resume_work);
 }
 
 /*******************************************************
