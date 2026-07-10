@@ -5268,6 +5268,23 @@ static void nuvolta_1665_shutdown(struct i2c_client *client)
 {
 	struct nuvolta_1665_chg *chip = i2c_get_clientdata(client);
 
+	if (!chip)
+		return;
+
+	cancel_delayed_work_sync(&chip->init_detect_work);
+	cancel_delayed_work_sync(&chip->probe_fw_download_work);
+	cancel_delayed_work_sync(&chip->chg_monitor_work);
+	cancel_delayed_work_sync(&chip->wireless_int_work);
+	cancel_delayed_work_sync(&chip->wireless_pg_det_work);
+	cancel_delayed_work_sync(&chip->reverse_chg_state_work);
+	cancel_delayed_work_sync(&chip->reverse_dping_state_work);
+	cancel_delayed_work_sync(&chip->delay_report_status_work);
+	cancel_delayed_work_sync(&chip->rx_alarm_work);
+	cancel_delayed_work_sync(&chip->rx_enable_usb_work);
+	cancel_delayed_work_sync(&chip->max_power_control_work);
+	cancel_delayed_work_sync(&chip->fw_state_work);
+	cancel_delayed_work_sync(&chip->pen_check_work);
+
 	if (chip->power_good_flag) {
 		nuvolta_1665_set_enable_mode(chip, false);
 		usleep_range(20000, 25000);

@@ -1937,6 +1937,9 @@ static int msm_pm_suspend(struct device *dev)
 		return -EINVAL;
 
 	priv = ddev->dev_private;
+	if (priv->shutdown_in_progress)
+		return 0;
+
 	kms = priv->kms;
 
 	if (kms && kms->funcs && kms->funcs->pm_suspend)

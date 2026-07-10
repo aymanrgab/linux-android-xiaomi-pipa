@@ -3076,6 +3076,10 @@ static int sde_kms_pm_suspend(struct device *dev)
 	if (!ddev || !ddev_to_msm_kms(ddev))
 		return -EINVAL;
 
+	if (ddev->dev_private &&
+			((struct msm_drm_private *)ddev->dev_private)->shutdown_in_progress)
+		return 0;
+
 	sde_kms = to_sde_kms(ddev_to_msm_kms(ddev));
 	SDE_EVT32(0);
 
