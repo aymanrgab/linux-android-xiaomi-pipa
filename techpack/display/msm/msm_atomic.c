@@ -16,6 +16,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <drm/drm_panel.h>
+#include <linux/dma-fence.h>
 
 #include "msm_drv.h"
 #include "msm_gem.h"
@@ -24,10 +25,11 @@
 
 #define MULTIPLE_CONN_DETECTED(x) (x > 1)
 
-/* Unbounded wait here wedges msm_drm workers; lastclose flush_workqueue
- * then sleeps uninterruptibly and Phosh restart never reaches sys_reboot.
+/* Unbounded waits here wedge disp_thread / compositor; Phosh restart
+ * never reaches sys_reboot (pstore: blank completes, no Going down).
  */
 #define MSM_ATOMIC_PENDING_TIMEOUT_MS	3000
+#define MSM_ATOMIC_FENCE_TIMEOUT_MS	3000
 
 struct msm_commit {
 	struct drm_device *dev;
@@ -503,8 +505,37 @@ static void complete_commit(struct msm_commit *c)
 	struct drm_device *dev = state->dev;
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_kms *kms = priv->kms;
+	struct drm_plane *plane;
+	struct drm_plane_state *new_plane_state;
+	int i, ret;
 
-	drm_atomic_helper_wait_for_fences(dev, state, false);
+	/*
+	 * Do not use drm_atomic_helper_wait_for_fences(..., false): that
+	 * calls dma_fence_wait() with no timeout and TASK_UNINTERRUPTIBLE.
+	 * A stuck plane fence during Phosh blank/teardown wedges disp_thread,
+	 * the compositor never closes the DRM fd, and reboot never reaches
+	 * machine_restart (pstore: no DBG pending TIMEOUT, no Going down).
+	 */
+	for_each_new_plane_in_state(state, plane, new_plane_state, i) {
+		if (!new_plane_state->fence)
+			continue;
+
+		WARN_ON(!new_plane_state->fb);
+
+		ret = dma_fence_wait_timeout(new_plane_state->fence, false,
+				msecs_to_jiffies(MSM_ATOMIC_FENCE_TIMEOUT_MS));
+		if (ret == 0) {
+			/* #region agent log */
+			pr_err("DBG54b041 H-F complete_commit: fence TIMEOUT plane=%d\n",
+				plane->base.id);
+			/* #endregion */
+		} else if (ret < 0) {
+			pr_err("DBG54b041 H-F complete_commit: fence wait err=%d plane=%d\n",
+				ret, plane->base.id);
+		}
+		dma_fence_put(new_plane_state->fence);
+		new_plane_state->fence = NULL;
+	}
 
 	kms->funcs->prepare_commit(kms, state);
 
@@ -722,11 +753,6 @@ retry:
 	 * state through Phosh restart (see pstore: blank completes,
 	 * never "Going down for restart").
 	 */
-	/* #region agent log */
-	pr_info("DBG54b041 H-A msm_atomic: wait pending crtcs=0x%x planes=0x%x want_c=0x%x want_p=0x%x nonblock=%d\n",
-		priv->pending_crtcs, priv->pending_planes,
-		c->crtc_mask, c->plane_mask, nonblock);
-	/* #endregion */
 	spin_lock(&priv->pending_crtcs_event.lock);
 	ret = 0;
 	while ((priv->pending_crtcs & c->crtc_mask) ||
@@ -762,10 +788,6 @@ retry:
 		DBG("start: %08x", c->crtc_mask);
 		priv->pending_crtcs |= c->crtc_mask;
 		priv->pending_planes |= c->plane_mask;
-		/* #region agent log */
-		pr_info("DBG54b041 H-A msm_atomic: acquired pending crtcs=0x%x planes=0x%x\n",
-			priv->pending_crtcs, priv->pending_planes);
-		/* #endregion */
 	}
 	spin_unlock(&priv->pending_crtcs_event.lock);
 

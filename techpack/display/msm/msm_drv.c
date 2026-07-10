@@ -84,6 +84,14 @@ static int msm_drm_reboot_notify(struct notifier_block *nb,
 	 * flag is set in msm_pdev_shutdown only after the display has
 	 * been torn down.
 	 */
+	/* #region agent log */
+	pr_err("DBG54b041 H-I msm_drm_reboot_notify: code=%lu pending_c=0x%x pending_p=0x%x\n",
+		code,
+		msm_primary_ddev && msm_primary_ddev->dev_private ?
+			((struct msm_drm_private *)msm_primary_ddev->dev_private)->pending_crtcs : 0,
+		msm_primary_ddev && msm_primary_ddev->dev_private ?
+			((struct msm_drm_private *)msm_primary_ddev->dev_private)->pending_planes : 0);
+	/* #endregion */
 	return NOTIFY_DONE;
 }
 
@@ -1246,13 +1254,13 @@ static void msm_lastclose(struct drm_device *dev)
 	}
 
 	/* #region agent log */
-	pr_info("DBG54b041 H-B msm_lastclose: before flush_workqueue pending_crtcs=0x%x pending_planes=0x%x\n",
+	pr_err("DBG54b041 H-B msm_lastclose: before flush_workqueue pending_crtcs=0x%x pending_planes=0x%x\n",
 		priv->pending_crtcs, priv->pending_planes);
 	/* #endregion */
 	/* wait for pending vblank requests to be executed by worker thread */
 	flush_workqueue(priv->wq);
 	/* #region agent log */
-	pr_info("DBG54b041 H-B msm_lastclose: after flush_workqueue\n");
+	pr_err("DBG54b041 H-B msm_lastclose: after flush_workqueue\n");
 	/* #endregion */
 
 	/*
@@ -1269,11 +1277,11 @@ retry:
 		goto fail;
 
 	/* #region agent log */
-	pr_info("DBG54b041 H-C msm_lastclose: before msm_disable_all_modes\n");
+	pr_err("DBG54b041 H-C msm_lastclose: before msm_disable_all_modes\n");
 	/* #endregion */
 	rc = msm_disable_all_modes(dev, &ctx);
 	/* #region agent log */
-	pr_info("DBG54b041 H-C msm_lastclose: after msm_disable_all_modes rc=%d\n",
+	pr_err("DBG54b041 H-C msm_lastclose: after msm_disable_all_modes rc=%d\n",
 		rc);
 	/* #endregion */
 	if (rc)
@@ -1292,7 +1300,7 @@ fail:
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 	/* #region agent log */
-	pr_info("DBG54b041 H-B msm_lastclose: done rc=%d\n", rc);
+	pr_err("DBG54b041 H-B msm_lastclose: done rc=%d\n", rc);
 	/* #endregion */
 }
 
