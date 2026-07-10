@@ -1,60 +1,5 @@
 # Initramfs hooks for Xiaomi Pad 6 (pipa)
 
-_pipa_kmsg() {
-	echo "initrd: pipa: $1" >/dev/kmsg 2>/dev/null || true
-}
-
-_pipa_find_persist() {
-	for cand in \
-		/dev/block/sda22 \
-		/dev/block/by-name/persist \
-		/dev/disk/by-partlabel/persist \
-		/dev/block/bootdevice/by-name/persist; do
-		[ -e "$cand" ] && { echo "$cand"; return 0; }
-	done
-	return 1
-}
-
-_pipa_dump_log() {
-	tag="${1:-setup}"
-	dev="$(_pipa_find_persist)" || { _pipa_kmsg "persist not found ($tag)"; return 1; }
-
-	mkdir -p /pipa-persist 2>/dev/null || return 1
-	mount -t ext4 -o rw "$dev" /pipa-persist 2>/dev/null || return 1
-
-	log=/pipa-persist/pipa-initrd.log
-	{
-		echo "===== pipa initrd log ($tag) ====="
-		date 2>/dev/null || true
-		if [ -f /pipa-persist/pipa-pre-reboot.log ]; then
-			echo "--- pipa-pre-reboot.log (Phosh restart) ---"
-			cat /pipa-persist/pipa-pre-reboot.log
-			echo "--- end pre-reboot ---"
-		fi
-		echo "--- input devices ---"
-		for namepath in /sys/class/input/event*/device/name; do
-			[ -f "$namepath" ] || continue
-			evname="$(basename "$(dirname "$(dirname "$namepath")")")"
-			echo "  $evname: $(cat "$namepath" 2>/dev/null)"
-		done
-		echo "--- framebuffer ---"
-		for fb in /sys/class/graphics/fb*; do
-			[ -d "$fb" ] || continue
-			echo "  $(basename "$fb"): virtual_size=$(cat "$fb/virtual_size" 2>/dev/null) blank=$(cat "$fb/blank" 2>/dev/null)"
-		done
-		ls -l /dev/fb0 /dev/graphics/fb0 2>/dev/null
-		echo "--- dmesg (drm/display/reboot) ---"
-		dmesg 2>/dev/null | grep -iE 'drm|dsi|cont_splash|msm|sde|panel|reboot|restart|fb0|blank|atomic|plane|crtc|splash' || true
-		echo "--- dmesg (touch/NVT) ---"
-		dmesg 2>/dev/null | grep -iE 'initrd|pipa|NVT|touch|firmware|lockdown|match fw|cmdline panel' || true
-		echo "--- dmesg (full) ---"
-		dmesg 2>/dev/null
-	} >> "$log" 2>&1
-	sync
-	umount /pipa-persist 2>/dev/null || true
-	_pipa_kmsg "appended $log ($tag)"
-}
-
 _pipa_wait_for_touch_fw() {
 	max_wait="${1:-300}"
 	i=0
@@ -77,13 +22,11 @@ _pipa_ensure_input_nodes() {
 }
 
 halium_hook_setup_touchscreen() {
-	_pipa_kmsg "preparing touchscreen for unl0kr"
 	_pipa_ensure_input_nodes
-	_pipa_wait_for_touch_fw 300 && _pipa_kmsg "NT36532 firmware ready" || _pipa_kmsg "firmware wait timed out"
+	_pipa_wait_for_touch_fw 300 || true
 	_pipa_ensure_input_nodes
-	_pipa_dump_log "pre-unl0kr"
 }
 
 halium_hook_teardown_touchscreen() {
-	_pipa_dump_log "post-unl0kr"
+	:
 }

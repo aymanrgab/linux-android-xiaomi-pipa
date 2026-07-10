@@ -561,7 +561,7 @@ unlock_encrypted_partition() {
 	tries="0"
 	while [ "${1}" ]; do
 		halium_hook setup_touchscreen
-		CRYPTTAB_TRIED="${tries}" droidian_minienv unl0kr -v -g 1800x2880 | \
+		CRYPTTAB_TRIED="${tries}" droidian_minienv unl0kr -v | \
 			droidian_minienv droidian-encryption-helper \
 				--device "${part}" \
 				--header "${header}" \

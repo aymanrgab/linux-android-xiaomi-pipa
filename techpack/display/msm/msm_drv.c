@@ -43,6 +43,7 @@
 #include <linux/of_address.h>
 #include <linux/kthread.h>
 #include <linux/workqueue.h>
+#include <linux/reboot.h>
 #include <uapi/linux/sched/types.h>
 #include <drm/drm_of.h>
 
@@ -69,6 +70,36 @@
 #define IDLE_TIMEOUT_MS_DEFAULT		100
 
 static DEFINE_MUTEX(msm_release_lock);
+
+static struct drm_device *msm_primary_ddev;
+static struct notifier_block msm_drm_reboot_nb;
+
+static int msm_drm_reboot_notify(struct notifier_block *nb,
+		unsigned long code, void *cmd)
+{
+	struct msm_drm_private *priv;
+
+	if (!msm_primary_ddev || !msm_primary_ddev->dev_private)
+		return NOTIFY_DONE;
+
+	priv = msm_primary_ddev->dev_private;
+	priv->shutdown_in_progress = true;
+
+	return NOTIFY_DONE;
+}
+
+static void msm_drm_reboot_notify_register(struct drm_device *ddev)
+{
+	msm_primary_ddev = ddev;
+	msm_drm_reboot_nb.notifier_call = msm_drm_reboot_notify;
+	register_reboot_notifier(&msm_drm_reboot_nb);
+}
+
+static void msm_drm_reboot_notify_unregister(void)
+{
+	unregister_reboot_notifier(&msm_drm_reboot_nb);
+	msm_primary_ddev = NULL;
+}
 
 static void msm_fb_output_poll_changed(struct drm_device *dev)
 {
@@ -361,6 +392,8 @@ static int msm_drm_uninit(struct device *dev)
 	struct msm_drm_private *priv = ddev->dev_private;
 	struct msm_kms *kms = priv->kms;
 	int i;
+
+	msm_drm_reboot_notify_unregister();
 
 	/* clean up display commit/event worker threads */
 	for (i = 0; i < priv->num_crtcs; i++) {
@@ -957,6 +990,7 @@ static int msm_drm_init(struct device *dev, struct drm_driver *drv)
 	if (ret)
 		goto fail;
 	priv->registered = true;
+	msm_drm_reboot_notify_register(ddev);
 
 	drm_mode_config_reset(ddev);
 
@@ -1204,8 +1238,10 @@ static void msm_lastclose(struct drm_device *dev)
 	flush_workqueue(priv->wq);
 
 	if (priv->fbdev) {
-		if (!priv->fbdev_cont_splash && !priv->shutdown_in_progress)
-			drm_fb_helper_restore_fbdev_mode_unlocked(priv->fbdev);
+		/*
+		 * Never restore fbdev mode on lastclose: atomic restore blocks
+		 * indefinitely on pipa cont_splash and breaks minui reboot.
+		 */
 		return;
 	}
 
@@ -2229,6 +2265,8 @@ static void msm_pdev_shutdown(struct platform_device *pdev)
 	}
 
 	priv->shutdown_in_progress = true;
+
+	msm_lastclose(ddev);
 }
 
 static const struct of_device_id dt_match[] = {
