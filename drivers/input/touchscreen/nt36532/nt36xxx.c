@@ -3705,13 +3705,14 @@ static void nvt_ts_shutdown(struct spi_device *client)
 	if (nvt_lockdown_wq)
 		cancel_delayed_work(&ts->nvt_lockdown_work);
 #if BOOT_UPDATE_FIRMWARE
-	if (nvt_fwu_wq) {
+	if (nvt_fwu_wq)
 		cancel_delayed_work(&ts->nvt_fwu_work);
-		cancel_work(&ts->nvt_panel_fw_correct_work);
-	}
 #endif
-	if (ts->event_wq)
-		cancel_work(&ts->resume_work);
+	/*
+	 * 4.19 has no async cancel_work(). Do not call cancel_work_sync()
+	 * here — leave pending resume/fw-correct work alone; reboot tears
+	 * the queues down with the rest of the system.
+	 */
 }
 
 /*******************************************************
