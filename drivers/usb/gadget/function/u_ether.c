@@ -878,6 +878,32 @@ void gether_set_gadget(struct net_device *net, struct usb_gadget *g)
 }
 EXPORT_SYMBOL_GPL(gether_set_gadget);
 
+int gether_attach_gadget(struct net_device *net, struct usb_gadget *g)
+{
+	int ret;
+
+	ret = device_move(&net->dev, &g->dev, DPM_ORDER_DEV_AFTER_PARENT);
+	if (ret)
+		return ret;
+
+	gether_set_gadget(net, g);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(gether_attach_gadget);
+
+void gether_detach_gadget(struct net_device *net)
+{
+	struct eth_dev *dev = netdev_priv(net);
+
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-D gether_detach_gadget net=%s parent=%s\n",
+	       net->name, net->dev.parent ? dev_name(net->dev.parent) : "(null)");
+	/* #endregion */
+	device_move(&net->dev, NULL, DPM_ORDER_NONE);
+	dev->gadget = NULL;
+}
+EXPORT_SYMBOL_GPL(gether_detach_gadget);
+
 int gether_set_dev_addr(struct net_device *net, const char *dev_addr)
 {
 	struct eth_dev *dev;
@@ -1052,6 +1078,10 @@ void gether_cleanup(struct eth_dev *dev)
 	if (!dev)
 		return;
 
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-D gether_cleanup net=%s\n",
+	       dev->net ? dev->net->name : "(null)");
+	/* #endregion */
 	unregister_netdev(dev->net);
 	flush_work(&dev->work);
 	free_netdev(dev->net);

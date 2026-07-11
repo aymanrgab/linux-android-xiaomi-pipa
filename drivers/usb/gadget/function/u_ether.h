@@ -154,6 +154,22 @@ static inline struct net_device *gether_setup_default(void)
 void gether_set_gadget(struct net_device *net, struct usb_gadget *g);
 
 /**
+ * gether_attach_gadget - reparent net_device under the gadget device
+ * @net: network device to reparent
+ * @g: USB gadget to parent to
+ *
+ * Used across bind cycles so the netdev does not outlive a destroyed
+ * gadget parent (dangling sysfs / reboot teardown hangs with USB tether).
+ */
+int gether_attach_gadget(struct net_device *net, struct usb_gadget *g);
+
+/**
+ * gether_detach_gadget - reparent net_device away from the gadget
+ * @net: network device to detach
+ */
+void gether_detach_gadget(struct net_device *net);
+
+/**
  * gether_set_dev_addr - initialize an ethernet-over-usb link with eth address
  * @net: device representing this link
  * @dev_addr: eth address of this device

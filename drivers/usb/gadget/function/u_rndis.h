@@ -21,6 +21,7 @@ struct f_rndis_opts {
 	const char			*manufacturer;
 	struct net_device		*net;
 	bool				bound;
+	int				bind_count;
 	bool				borrowed_net;
 
 	struct config_group		*rndis_interf_group;

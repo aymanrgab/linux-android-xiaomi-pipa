@@ -1462,15 +1462,30 @@ static int ncm_bind(struct usb_configuration *c, struct usb_function *f)
 	}
 
 	mutex_lock(&ncm_opts->lock);
-	gether_set_gadget(ncm_opts->net, cdev->gadget);
-	if (!ncm_opts->bound)
-		status = gether_register_netdev(ncm_opts->net);
+	if (ncm_opts->bind_count == 0) {
+		if (!device_is_registered(&ncm_opts->net->dev)) {
+			gether_set_gadget(ncm_opts->net, cdev->gadget);
+			status = gether_register_netdev(ncm_opts->net);
+			if (!status)
+				ncm_opts->bound = true;
+		} else {
+			status = gether_attach_gadget(ncm_opts->net,
+						      cdev->gadget);
+		}
+	} else {
+		status = 0;
+	}
+	if (!status)
+		ncm_opts->bind_count++;
 	mutex_unlock(&ncm_opts->lock);
+
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-B ncm_bind status=%d bind_count=%d bound=%d\n",
+	       status, ncm_opts->bind_count, ncm_opts->bound);
+	/* #endregion */
 
 	if (status)
 		goto fail;
-
-	ncm_opts->bound = true;
 
 	ncm_string_defs[1].s = ncm->ethaddr;
 
@@ -1680,9 +1695,14 @@ static void ncm_free_inst(struct usb_function_instance *f)
 #endif
 
 	opts = container_of(f, struct f_ncm_opts, func_inst);
-	if (opts->bound)
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-A ncm_free_inst bound=%d bind_count=%d registered=%d\n",
+	       opts->bound, opts->bind_count,
+	       opts->net ? device_is_registered(&opts->net->dev) : -1);
+	/* #endregion */
+	if (opts->net && device_is_registered(&opts->net->dev))
 		gether_cleanup(netdev_priv(opts->net));
-	else
+	else if (opts->net)
 		free_netdev(opts->net);
 	kfree(opts->ncm_interf_group);
 	kfree(opts);
@@ -1750,8 +1770,16 @@ static void ncm_free(struct usb_function *f)
 static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_ncm *ncm = func_to_ncm(f);
+	struct f_ncm_opts *ncm_opts;
 
 	DBG(c->cdev, "ncm unbind\n");
+
+	ncm_opts = container_of(f->fi, struct f_ncm_opts, func_inst);
+
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-B ncm_unbind bind_count=%d\n",
+	       ncm_opts->bind_count);
+	/* #endregion */
 
 	hrtimer_cancel(&ncm->task_timer);
 
@@ -1768,6 +1796,13 @@ static void ncm_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	kfree(ncm->notify_req->buf);
 	usb_ep_free_request(ncm->notify, ncm->notify_req);
+
+	mutex_lock(&ncm_opts->lock);
+	if (ncm_opts->bind_count > 0)
+		ncm_opts->bind_count--;
+	if (ncm_opts->bind_count == 0 && ncm_opts->net)
+		gether_detach_gadget(ncm_opts->net);
+	mutex_unlock(&ncm_opts->lock);
 }
 
 static struct usb_function *ncm_alloc(struct usb_function_instance *fi)

@@ -704,13 +704,29 @@ rndis_bind(struct usb_configuration *c, struct usb_function *f)
 	 * with list_for_each_entry, so we assume no race condition
 	 * with regard to rndis_opts->bound access
 	 */
-	if (!rndis_opts->bound) {
-		gether_set_gadget(rndis_opts->net, cdev->gadget);
-		status = gether_register_netdev(rndis_opts->net);
-		if (status)
+	mutex_lock(&rndis_opts->lock);
+	if (rndis_opts->bind_count == 0) {
+		if (!device_is_registered(&rndis_opts->net->dev)) {
+			gether_set_gadget(rndis_opts->net, cdev->gadget);
+			status = gether_register_netdev(rndis_opts->net);
+			if (!status)
+				rndis_opts->bound = true;
+		} else {
+			status = gether_attach_gadget(rndis_opts->net,
+						      cdev->gadget);
+		}
+		if (status) {
+			mutex_unlock(&rndis_opts->lock);
 			goto fail;
-		rndis_opts->bound = true;
+		}
 	}
+	rndis_opts->bind_count++;
+	mutex_unlock(&rndis_opts->lock);
+
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-R rndis_bind bind_count=%d bound=%d\n",
+	       rndis_opts->bind_count, rndis_opts->bound);
+	/* #endregion */
 
 	us = usb_gstrings_attach(cdev, rndis_strings,
 				 ARRAY_SIZE(rndis_string_defs));
@@ -937,10 +953,15 @@ static void rndis_free_inst(struct usb_function_instance *f)
 	struct f_rndis_opts *opts;
 
 	opts = container_of(f, struct f_rndis_opts, func_inst);
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-R rndis_free_inst borrowed=%d bound=%d bind_count=%d registered=%d\n",
+	       opts->borrowed_net, opts->bound, opts->bind_count,
+	       opts->net ? device_is_registered(&opts->net->dev) : -1);
+	/* #endregion */
 	if (!opts->borrowed_net) {
-		if (opts->bound)
+		if (opts->net && device_is_registered(&opts->net->dev))
 			gether_cleanup(netdev_priv(opts->net));
-		else
+		else if (opts->net)
 			free_netdev(opts->net);
 	}
 
@@ -1010,6 +1031,14 @@ static void rndis_free(struct usb_function *f)
 static void rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 {
 	struct f_rndis		*rndis = func_to_rndis(f);
+	struct f_rndis_opts	*rndis_opts;
+
+	rndis_opts = container_of(f->fi, struct f_rndis_opts, func_inst);
+
+	/* #region agent log */
+	pr_err("DBG54b041 NCM-R rndis_unbind bind_count=%d\n",
+	       rndis_opts->bind_count);
+	/* #endregion */
 
 	kfree(f->os_desc_table);
 	f->os_desc_n = 0;
@@ -1017,6 +1046,13 @@ static void rndis_unbind(struct usb_configuration *c, struct usb_function *f)
 
 	kfree(rndis->notify_req->buf);
 	usb_ep_free_request(rndis->notify, rndis->notify_req);
+
+	mutex_lock(&rndis_opts->lock);
+	if (rndis_opts->bind_count > 0)
+		rndis_opts->bind_count--;
+	if (rndis_opts->bind_count == 0 && rndis_opts->net)
+		gether_detach_gadget(rndis_opts->net);
+	mutex_unlock(&rndis_opts->lock);
 }
 
 static struct usb_function *rndis_alloc(struct usb_function_instance *fi)
