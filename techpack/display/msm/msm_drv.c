@@ -1223,7 +1223,14 @@ static int msm_disable_all_modes(
 	return ret;
 }
 
-static void msm_lastclose(struct drm_device *dev)
+/*
+ * Full CRTC/panel power-off. Used from platform shutdown only.
+ * Client DRM lastclose must NOT call this during Phosh reboot: atomic
+ * disable races LXC/Android teardown and has caused exit_mmap and NULL
+ * hrtimer panics (DBG54b041 H-P / H-Q). Soft client lastclose + this
+ * path at msm_pdev_shutdown is the safe split.
+ */
+static void msm_disable_display_for_shutdown(struct drm_device *dev)
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_kms *kms = priv->kms;
@@ -1254,21 +1261,14 @@ static void msm_lastclose(struct drm_device *dev)
 	}
 
 	/* #region agent log */
-	pr_err("DBG54b041 H-B msm_lastclose: before flush_workqueue pending_crtcs=0x%x pending_planes=0x%x\n",
+	pr_err("DBG54b041 H-B msm_shutdown_disable: before flush_workqueue pending_crtcs=0x%x pending_planes=0x%x\n",
 		priv->pending_crtcs, priv->pending_planes);
 	/* #endregion */
 	/* wait for pending vblank requests to be executed by worker thread */
 	flush_workqueue(priv->wq);
 	/* #region agent log */
-	pr_err("DBG54b041 H-B msm_lastclose: after flush_workqueue\n");
+	pr_err("DBG54b041 H-B msm_shutdown_disable: after flush_workqueue\n");
 	/* #endregion */
-
-	/*
-	 * Never call drm_fb_helper_restore_fbdev_mode_unlocked(): on pipa that
-	 * atomic restore hangs with cont_splash. Still fall through to disable
-	 * CRTCs once splash is gone so Phosh/update reboot can unmap buffers
-	 * without an MDSS SMMU fault storm.
-	 */
 
 	drm_modeset_acquire_init(&ctx, 0);
 retry:
@@ -1277,11 +1277,11 @@ retry:
 		goto fail;
 
 	/* #region agent log */
-	pr_err("DBG54b041 H-C msm_lastclose: before msm_disable_all_modes\n");
+	pr_err("DBG54b041 H-C msm_shutdown_disable: before msm_disable_all_modes\n");
 	/* #endregion */
 	rc = msm_disable_all_modes(dev, &ctx);
 	/* #region agent log */
-	pr_err("DBG54b041 H-C msm_lastclose: after msm_disable_all_modes rc=%d\n",
+	pr_err("DBG54b041 H-C msm_shutdown_disable: after msm_disable_all_modes rc=%d\n",
 		rc);
 	/* #endregion */
 	if (rc)
@@ -1300,8 +1300,28 @@ fail:
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 	/* #region agent log */
-	pr_err("DBG54b041 H-B msm_lastclose: done rc=%d\n", rc);
+	pr_err("DBG54b041 H-B msm_shutdown_disable: done rc=%d\n", rc);
 	/* #endregion */
+}
+
+/*
+ * DRM client lastclose (Phosh/phoc exit): soft only.
+ * Full panel off is deferred to msm_pdev_shutdown.
+ */
+static void msm_lastclose(struct drm_device *dev)
+{
+	struct msm_drm_private *priv = dev->dev_private;
+
+	if (priv->shutdown_in_progress)
+		return;
+
+	/* #region agent log */
+	pr_err("DBG54b041 H-S msm_lastclose: soft skip atomic disable pending_c=0x%x pending_p=0x%x\n",
+		priv->pending_crtcs, priv->pending_planes);
+	/* #endregion */
+
+	if (priv->wq)
+		flush_workqueue(priv->wq);
 }
 
 static irqreturn_t msm_irq(int irq, void *arg)
@@ -2305,11 +2325,16 @@ static void msm_pdev_shutdown(struct platform_device *pdev)
 	/*
 	 * Tear down the display via the normal atomic modeset path first.
 	 * shutdown_in_progress must NOT be set yet, otherwise
-	 * msm_lastclose→msm_disable_all_modes→msm_atomic_commit will bail
+	 * msm_disable_display_for_shutdown→msm_disable_all_modes will bail
 	 * with -EINVAL and leave the MDSS hardware in a live state that
 	 * can hang on wait_for_completion during warm reboot.
+	 *
+	 * Client DRM lastclose is soft (H-S); full disable happens here only.
 	 */
-	msm_lastclose(ddev);
+	/* #region agent log */
+	pr_err("DBG54b041 H-S msm_pdev_shutdown: full disable begin\n");
+	/* #endregion */
+	msm_disable_display_for_shutdown(ddev);
 
 	/* Now safe to block any residual atomic commits */
 	priv->shutdown_in_progress = true;
