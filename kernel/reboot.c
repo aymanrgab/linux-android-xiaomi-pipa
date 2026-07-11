@@ -68,10 +68,20 @@ EXPORT_SYMBOL_GPL(emergency_restart);
 
 void kernel_restart_prepare(char *cmd)
 {
+	/* #region agent log */
+	pr_err("DBG54b041 R-A kernel_restart_prepare: enter cmd=%s\n",
+	       cmd ? cmd : "(null)");
+	/* #endregion */
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
 	usermodehelper_disable();
+	/* #region agent log */
+	pr_err("DBG54b041 R-A kernel_restart_prepare: before device_shutdown\n");
+	/* #endregion */
 	device_shutdown();
+	/* #region agent log */
+	pr_err("DBG54b041 R-A kernel_restart_prepare: after device_shutdown\n");
+	/* #endregion */
 }
 
 /**

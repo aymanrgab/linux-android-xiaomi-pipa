@@ -114,6 +114,18 @@ static void eth_get_drvinfo(struct net_device *net, struct ethtool_drvinfo *p)
 
 	strlcpy(p->driver, "g_ether", sizeof(p->driver));
 	strlcpy(p->version, UETH__VERSION, sizeof(p->version));
+	/*
+	 * gether_detach_gadget() clears dev->gadget while net_device stays
+	 * visible; udev/ethtool can race here (pstore: Oops in eth_get_drvinfo
+	 * right after NCM-D, then panic reboot). Skip fw/bus when detached.
+	 */
+	if (!dev->gadget) {
+		/* #region agent log */
+		pr_err_ratelimited("DBG54b041 NCM-E eth_get_drvinfo: gadget NULL net=%s\n",
+				   net->name);
+		/* #endregion */
+		return;
+	}
 	strlcpy(p->fw_version, dev->gadget->name, sizeof(p->fw_version));
 	strlcpy(p->bus_info, dev_name(&dev->gadget->dev), sizeof(p->bus_info));
 }
