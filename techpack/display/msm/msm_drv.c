@@ -1212,7 +1212,7 @@ static int msm_disable_all_modes(
 
 	for (i = 0; i < TEARDOWN_DEADLOCK_RETRY_MAX; i++) {
 		ret = msm_disable_all_modes_commit(dev, state);
-		if (ret != -EDEADLK || ret != -ERESTARTSYS)
+		if (ret != -EDEADLK && ret != -ERESTARTSYS)
 			break;
 		drm_atomic_state_clear(state);
 		drm_modeset_backoff(ctx);
@@ -1235,7 +1235,7 @@ static void msm_disable_display_for_shutdown(struct drm_device *dev)
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_kms *kms = priv->kms;
 	struct drm_modeset_acquire_ctx ctx;
-	int i, rc;
+	int i, rc, retries = 0;
 
 	if (priv->shutdown_in_progress)
 		return;
@@ -1291,7 +1291,7 @@ retry:
 		kms->funcs->lastclose(kms, &ctx);
 
 fail:
-	if (rc == -EDEADLK) {
+	if (rc == -EDEADLK && retries++ < TEARDOWN_DEADLOCK_RETRY_MAX) {
 		drm_modeset_backoff(&ctx);
 		goto retry;
 	} else if (rc) {
