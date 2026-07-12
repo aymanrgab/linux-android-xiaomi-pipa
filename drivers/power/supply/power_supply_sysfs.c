@@ -148,7 +148,7 @@ static ssize_t power_supply_show_property(struct device *dev,
 		ret = power_supply_get_property(psy, psp, &value);
 
 		if (ret < 0) {
-			if (ret == -ENODATA)
+			if (ret == -ENODATA || ret == -EINVAL)
 				dev_dbg_ratelimited(dev,
 					"driver has no data for `%s' property\n",
 					attr->attr.name);
