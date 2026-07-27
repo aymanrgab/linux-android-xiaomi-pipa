@@ -565,21 +565,34 @@ void evdi_gem_free_object(struct drm_gem_object *gem_obj)
 	if (obj->vmapping)
 		evdi_gem_vunmap(obj);
 
+	/*
+	 * dma_buf_detach() frees the attachment. Saving dmabuf first is
+	 * required — using import_attach->dmabuf after detach is a UAF and
+	 * panics (seen as Oops in dma_buf_put from phoc GEM close).
+	 */
 	if (gem_obj->import_attach) {
-		dma_buf_detach(gem_obj->import_attach->dmabuf,
-			       gem_obj->import_attach);
-		dma_buf_put(gem_obj->import_attach->dmabuf);
+		struct dma_buf_attachment *attach = gem_obj->import_attach;
+		struct dma_buf *dma_buf = attach->dmabuf;
+
+		gem_obj->import_attach = NULL;
+		if (obj->sg) {
+			dma_buf_unmap_attachment(attach, obj->sg,
+						 DMA_BIDIRECTIONAL);
+			sg_free_table(obj->sg);
+			kfree(obj->sg);
+			obj->sg = NULL;
+		}
+		dma_buf_detach(dma_buf, attach);
+		dma_buf_put(dma_buf);
+	} else if (obj->sg) {
+		sg_free_table(obj->sg);
+		kfree(obj->sg);
+		obj->sg = NULL;
 	}
 
 	if (obj->dmabuf_file) {
 		fput(obj->dmabuf_file);
 		obj->dmabuf_file = NULL;
-	}
-
-	if (obj->sg) {
-		sg_free_table(obj->sg);
-		kfree(obj->sg);
-		obj->sg = NULL;
 	}
 
 	if (obj->pages)
